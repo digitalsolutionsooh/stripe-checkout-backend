@@ -3,8 +3,6 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import stripe
-import os
-import stripe
 
 stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
@@ -60,3 +58,9 @@ async def create_checkout_session(request: Request):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+# ADICIONE ESTA PARTE PARA QUE O RAILWAY DETECTE E USE A PORTA CORRETA
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
