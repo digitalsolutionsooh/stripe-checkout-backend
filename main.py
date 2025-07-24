@@ -3,10 +3,10 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import stripe
-from dotenv import load_dotenv
+import os
+import stripe
 
-load_dotenv()
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 app = FastAPI()
 
