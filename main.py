@@ -4,8 +4,6 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 import stripe
 
-stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
-
 app = FastAPI()
 
 origins = [
@@ -22,6 +20,11 @@ app.add_middleware(
 
 @app.post("/create-checkout-session")
 async def create_checkout_session(request: Request):
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    
+    if not stripe.api_key:
+        return JSONResponse(status_code=500, content={"error": "Stripe Secret Key não encontrada no ambiente."})
+
     body = await request.json()
 
     price_id = body.get("price_id")
