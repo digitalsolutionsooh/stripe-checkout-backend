@@ -87,7 +87,7 @@ async def create_checkout_session(request: Request):
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
     payload = await request.body()
-    sig = request.headers.get("stripe-signature", "")
+    sig     = request.headers.get("stripe-signature", "")
     try:
         event = stripe.Webhook.construct_event(payload, sig, WEBHOOK_SECRET)
     except stripe.error.SignatureVerificationError:
@@ -99,20 +99,20 @@ async def stripe_webhook(request: Request):
         )
         cust = session["customer"]
 
-        # InvoiceItem + Invoice
-        stripe.InvoiceItem.create(
-            customer=cust,
-            amount=session.amount_total,
-            currency=session.currency,
-            description="Purchase by Digital Solutions"
-        )
-        template_id = "inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
-        stripe.Invoice.create(
-            customer=cust,
-            auto_advance=True,
-            template=template_id
-        )
-
+        product_ids = [ item.price.product for item in session.line_items.data ]
+        if "prod_SiUIZzdFIN9fmS" in product_ids:
+            stripe.InvoiceItem.create(
+                customer=cust,
+                amount=session.amount_total,
+                currency=session.currency,
+                description="Purchase by Digital Solutions"
+            )
+            stripe.Invoice.create(
+                customer=cust,
+                auto_advance=True,
+                template="inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
+            )
+            
         # Conversions API: Purchase
         email_hash = hashlib.sha256(
             session.customer_details.email.encode('utf-8')
