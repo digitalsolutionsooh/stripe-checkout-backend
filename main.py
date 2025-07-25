@@ -10,6 +10,10 @@ app = FastAPI()
 async def health():
     return {"status": "up"}
 
+@app.post("/ping")
+async def ping():
+    return {"pong": True}
+
 origins = [
     "https://learnmoredigitalcourse.com"
 ]
