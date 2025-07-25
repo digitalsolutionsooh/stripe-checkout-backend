@@ -6,6 +6,10 @@ import stripe
 
 app = FastAPI()
 
+@app.get("/health")
+async def health():
+    return {"status": "up"}
+
 origins = [
     "https://learnmoredigitalcourse.com"
 ]
