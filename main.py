@@ -25,6 +25,7 @@ app.add_middleware(
 @app.post("/create-checkout-session")
 async def create_checkout_session(request: Request):
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    print(f"⚙️  Stripe Secret Key loaded: {bool(stripe.api_key)}")
     
     if not stripe.api_key:
         return JSONResponse(status_code=500, content={"error": "Stripe Secret Key não encontrada no ambiente."})
