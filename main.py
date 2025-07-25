@@ -29,8 +29,51 @@ app.add_middleware(
 @app.post("/create-checkout-session")
 async def create_checkout_session(request: Request):
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-    print(f"⚙️  Stripe Secret Key loaded: {bool(stripe.api_key)}")
-    
+
+    WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+    @app.post("/webhook")
+    async def stripe_webhook(request: Request):
+        payload = await request.body()
+        sig = request.headers.get("stripe-signature", "")
+        try:
+            event = stripe.Webhook.construct_event(payload, sig, WEBHOOK_SECRET)
+        except stripe.error.SignatureVerificationError:
+            return JSONResponse(status_code=400, content={"error": "Invalid webhook signature"})
+
+        if event["type"] == "checkout.session.completed":
+            session = event["data"]["object"]
+            cust = session["customer"]
+
+            # 1) registra o item de fatura
+            stripe.InvoiceItem.create(
+                customer=cust,
+                amount=session["amount_total"],
+                currency=session["currency"],
+                description="Purchase by Digital Solutions"
+            )
+
+            # 2) recupera os produtos da sessão
+            line_items = stripe.checkout.Session.list_line_items(
+                session["id"], limit=10
+            ).data
+            products = [ li.price.product for li in line_items ]
+
+            # 3) escolhe o template de fatura se for o produto alvo
+            if "prod_SiUIZzdFIN9fmS" in products:
+                invoice = stripe.Invoice.create(
+                    customer=cust,
+                    auto_advance=True,
+                    template="inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
+                )
+            else:
+                invoice = stripe.Invoice.create(
+                    customer=cust,
+                    auto_advance=True
+                )
+
+        return JSONResponse(status_code=200, content={"received": True})
+
     if not stripe.api_key:
         return JSONResponse(status_code=500, content={"error": "Stripe Secret Key não encontrada no ambiente."})
 
