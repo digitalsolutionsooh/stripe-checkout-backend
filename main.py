@@ -40,7 +40,10 @@ async def create_checkout_session(request: Request):
     body = await request.json()
     price_id = body.get("price_id")
     quantity = body.get("quantity", 1)
-    utms = { k: body.get(k, "") for k in ("utm_source","utm_medium","utm_campaign","utm_term","utm_content") }
+    # coletamos os UTMs
+    utms = { k: body.get(k, "") for k in (
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"
+    ) }
 
     if not price_id:
         return JSONResponse(status_code=400, content={"error": "price_id is required"})
@@ -51,8 +54,13 @@ async def create_checkout_session(request: Request):
         mode='payment',
         success_url='https://learnmoredigitalcourse.com/pink-up1-stripe',
         cancel_url='https://learnmoredigitalcourse.com/erro',
+        # grava UTMs na própria Session
         metadata=utms,
-        payment_intent_data={"setup_future_usage": "off_session"},
+        # grava UTMs também no PaymentIntent
+        payment_intent_data={
+            "metadata": utms,
+            "setup_future_usage": "off_session"
+        },
         expand=["line_items"]
     )
 
@@ -99,6 +107,11 @@ async def stripe_webhook(request: Request):
             event["data"]["object"]["id"], expand=["line_items"]
         )
         cust = session["customer"]
+        
+        stripe.Customer.modify(
+            cust,
+            metadata=session.metadata
+        )
 
         # — Só cria invoice se tiver o produto certo
         product_ids = [item.price.product for item in session.line_items.data]
