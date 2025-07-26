@@ -40,6 +40,7 @@ async def create_checkout_session(request: Request):
     body = await request.json()
     price_id = body.get("price_id")
     quantity = body.get("quantity", 1)
+    customer_email = body.get("customer_email")
     # coletamos os UTMs
     utms = { k: body.get(k, "") for k in (
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"
@@ -52,6 +53,8 @@ async def create_checkout_session(request: Request):
         payment_method_types=['card'],
         line_items=[{'price': price_id, 'quantity': quantity}],
         mode='payment',
+        customer_creation='always',
+        customer_email=customer_email,
         success_url='https://learnmoredigitalcourse.com/pink-up1-stripe',
         cancel_url='https://learnmoredigitalcourse.com/erro',
         # grava UTMs na própria Session
