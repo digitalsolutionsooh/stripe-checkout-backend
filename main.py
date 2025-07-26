@@ -110,7 +110,7 @@ async def stripe_webhook(request: Request):
             event["data"]["object"]["id"], expand=["line_items"]
         )
         cust = session["customer"]
-        
+
         stripe.Customer.modify(
             cust,
             metadata=session.metadata
@@ -120,52 +120,68 @@ async def stripe_webhook(request: Request):
         product_ids = [item.price.product for item in session.line_items.data]
         if "prod_SiUIZzdFIN9fmS" in product_ids:
             try:
-                print(f"🔔 [webhook] Produto correto em session {session.id}, customer {cust}, products {product_ids}")
-                invoice_item = stripe.InvoiceItem.create(
+                # Debug
+                print(f"🔔 [webhook] Barisland na sessão {session.id}")
+
+                # 1) InvoiceItem
+                stripe.InvoiceItem.create(
                     customer=cust,
                     amount=session.amount_total,
                     currency=session.currency,
-                    description="Purchase by Digital Solutions"
+                    description="Barisland Formula"
                 )
-                print(f"   → InvoiceItem criado: {invoice_item.id}")
+
+                # 2) Invoice com footer customizado
                 invoice = stripe.Invoice.create(
                     customer=cust,
                     auto_advance=True,
-                    template="inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
+                    collection_method="send_invoice",
+                    days_until_due=0,
+                    footer=(
+                        "Thank you for purchasing the formula. To access the material, "
+                        "simply click on the link and follow the instructions: "
+                        "https://burnjaroformula.online/members/\n\n"
+                        "If you have any questions, please send an email to: "
+                        "digital.solutions.ooh@gmail.com"
+                    ),
+                    metadata={
+                        "product_id": "prod_SiUIZzdFIN9fmS",
+                        **session.metadata
+                    }
                 )
-                print(f"   → Invoice criado: {invoice.id}, status: {invoice.status}")
+                print(f"   → Invoice criada: {invoice.id}, status: {invoice.status}")
 
-                # Conversions API: Purchase
+                # 3) Conversions API: Purchase
                 email_hash = hashlib.sha256(
                     session.customer_details.email.encode('utf-8')
                 ).hexdigest()
                 purchase_payload = {
-                  "data": [{
-                    "event_name":    "Purchase",
-                    "event_time":    int(time.time()),
-                    "event_id":      session.id,
-                    "action_source": "website",
-                    "event_source_url": session.url,
-                    "user_data": {"em": email_hash},
-                    "custom_data": {
-                      "currency": session.currency,
-                      "value":    session.amount_total / 100.0,
-                      "content_ids": [li.price.id for li in session.line_items.data],
-                      "content_type": "product"
-                    }
-                  }]
+                    "data": [{
+                        "event_name":    "Purchase",
+                        "event_time":    int(time.time()),
+                        "event_id":      session.id,
+                        "action_source": "website",
+                        "event_source_url": session.url,
+                        "user_data": {"em": email_hash},
+                        "custom_data": {
+                            "currency": session.currency,
+                            "value":    session.amount_total / 100.0,
+                            "content_ids": [li.price.id for li in session.line_items.data],
+                            "content_type": "product"
+                        }
+                    }]
                 }
                 requests.post(
-                  f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
-                  params={"access_token": ACCESS_TOKEN},
-                  json=purchase_payload
+                    f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
+                    params={"access_token": ACCESS_TOKEN},
+                    json=purchase_payload
                 )
 
             except Exception as e:
                 import traceback
                 print("‼️ Erro no webhook checkout.session.completed:", e)
                 print(traceback.format_exc())
-                # devolve 200 assim a Stripe não fica re-tentando até você corrigir
+                # devolve 200 pra Stripe parar de re-tentar
                 return JSONResponse(status_code=200, content={"received": True})
 
     return JSONResponse({"received": True})
