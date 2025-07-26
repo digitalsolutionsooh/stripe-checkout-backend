@@ -90,56 +90,64 @@ async def stripe_webhook(request: Request):
     sig     = request.headers.get("stripe-signature", "")
     try:
         event = stripe.Webhook.construct_event(payload, sig, WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError as e:              # <-- capturar a exceção como `e`
-        print("⚠️ Webhook signature mismatch:", e)                    # <-- mantém seu debug
+    except stripe.error.SignatureVerificationError as e:
+        print("⚠️ Webhook signature mismatch:", e)
         raise HTTPException(400, "Invalid webhook signature")
 
     if event["type"] == "checkout.session.completed":
-        session = stripe.checkout.Session.retrieve(
-            event["data"]["object"]["id"], expand=["line_items"]
-        )
-        cust = session["customer"]
-
-        # ←– Só criar invoice se o produto certo estiver no pedido
-        product_ids = [item.price.product for item in session.line_items.data]
-        if "prod_SiUIZzdFIN9fmS" in product_ids:
-            stripe.InvoiceItem.create(
-                customer=cust,
-                amount=session.amount_total,
-                currency=session.currency,
-                description="Purchase by Digital Solutions"
+        try:
+            session = stripe.checkout.Session.retrieve(
+                event["data"]["object"]["id"], expand=["line_items"]
             )
-            stripe.Invoice.create(
-                customer=cust,
-                auto_advance=True,
-                template="inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
-            )
+            cust = session["customer"]
 
-        # Conversions API: Purchase (mantém igual)
-        email_hash = hashlib.sha256(
-            session.customer_details.email.encode('utf-8')
-        ).hexdigest()
-        purchase_payload = {
-          "data": [{
-            "event_name":    "Purchase",
-            "event_time":    int(time.time()),
-            "event_id":      session.id,
-            "action_source": "website",
-            "event_source_url": session.url,
-            "user_data": {"em": email_hash},
-            "custom_data": {
-              "currency": session.currency,
-              "value":    session.amount_total / 100.0,
-              "content_ids": [li.price.id for li in session.line_items.data],
-              "content_type": "product"
+            # — Só cria invoice se tiver o produto certo
+            product_ids = [item.price.product for item in session.line_items.data]
+            if "prod_SiUIZzdFIN9fmS" in product_ids:
+                stripe.InvoiceItem.create(
+                    customer=cust,
+                    amount=session.amount_total,
+                    currency=session.currency,
+                    description="Purchase by Digital Solutions"
+                )
+                stripe.Invoice.create(
+                    customer=cust,
+                    auto_advance=True,
+                    template="inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
+                )
+
+            # Conversions API: Purchase
+            email_hash = hashlib.sha256(
+                session.customer_details.email.encode('utf-8')
+            ).hexdigest()
+            purchase_payload = {
+              "data": [{
+                "event_name":    "Purchase",
+                "event_time":    int(time.time()),
+                "event_id":      session.id,
+                "action_source": "website",
+                "event_source_url": session.url,
+                "user_data": {"em": email_hash},
+                "custom_data": {
+                  "currency": session.currency,
+                  "value":    session.amount_total / 100.0,
+                  "content_ids": [li.price.id for li in session.line_items.data],
+                  "content_type": "product"
+                }
+              }]
             }
-          }]
-        }
-        requests.post(
-          f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
-          params={"access_token": ACCESS_TOKEN},
-          json=purchase_payload
-        )
+            requests.post(
+              f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
+              params={"access_token": ACCESS_TOKEN},
+              json=purchase_payload
+            )
+
+        except Exception as e:
+            import traceback
+            print("‼️ Erro no webhook checkout.session.completed:", e)
+            print(traceback.format_exc())
+            # devolve 200 para Stripe parar de re‑tentar até você corrigir
+            return JSONResponse(status_code=200, content={"received": True})
 
     return JSONResponse({"received": True})
 
