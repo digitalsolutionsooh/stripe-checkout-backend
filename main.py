@@ -90,7 +90,8 @@ async def stripe_webhook(request: Request):
     sig     = request.headers.get("stripe-signature", "")
     try:
         event = stripe.Webhook.construct_event(payload, sig, WEBHOOK_SECRET)
-    except stripe.error.SignatureVerificationError:
+    except stripe.error.SignatureVerificationError as e:              # <-- capturar a exceção como `e`
+        print("⚠️ Webhook signature mismatch:", e)                    # <-- mantém seu debug
         raise HTTPException(400, "Invalid webhook signature")
 
     if event["type"] == "checkout.session.completed":
@@ -99,7 +100,8 @@ async def stripe_webhook(request: Request):
         )
         cust = session["customer"]
 
-        product_ids = [ item.price.product for item in session.line_items.data ]
+        # ←– Só criar invoice se o produto certo estiver no pedido
+        product_ids = [item.price.product for item in session.line_items.data]
         if "prod_SiUIZzdFIN9fmS" in product_ids:
             stripe.InvoiceItem.create(
                 customer=cust,
@@ -112,8 +114,8 @@ async def stripe_webhook(request: Request):
                 auto_advance=True,
                 template="inrtem_1Rn7qKEHsMKn9uopWdZN8xlL"
             )
-            
-        # Conversions API: Purchase
+
+        # Conversions API: Purchase (mantém igual)
         email_hash = hashlib.sha256(
             session.customer_details.email.encode('utf-8')
         ).hexdigest()
