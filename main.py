@@ -120,16 +120,16 @@ async def stripe_webhook(request: Request):
         product_ids = [item.price.product for item in session.line_items.data]
         if "prod_SiUIZzdFIN9fmS" in product_ids:
             try:
-                # Debug
                 print(f"🔔 [webhook] Barisland na sessão {session.id}")
 
-                # 1) InvoiceItem
-                stripe.InvoiceItem.create(
-                    customer=cust,
-                    amount=session.amount_total,
-                    currency=session.currency,
-                    description="Barisland Formula"
-                )
+                # 1) InvoiceItem para cada linha do checkout,
+                #    usando o price.id e a quantidade exata
+                for item in session.line_items.data:
+                    stripe.InvoiceItem.create(
+                        customer=cust,
+                        price=item.price.id,      # usa o mesmo price que o cliente pagou
+                        quantity=item.quantity    # mantém a quantidade
+                    )
 
                 # 2) Invoice com footer customizado
                 invoice = stripe.Invoice.create(
@@ -149,7 +149,7 @@ async def stripe_webhook(request: Request):
                         **session.metadata
                     }
                 )
-                print(f"   → Invoice criada: {invoice.id}, status: {invoice.status}")
+                print(f"   → Invoice criada: {invoice.id}, valor devida: {invoice.amount_due/100:.2f} {invoice.currency.upper()}")
 
                 # 3) Conversions API: Purchase
                 email_hash = hashlib.sha256(
