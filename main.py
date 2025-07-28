@@ -49,13 +49,19 @@ async def create_checkout_session(request: Request):
     if not price_id:
         return JSONResponse(status_code=400, content={"error": "price_id is required"})
 
+    # escolhe a URL de sucesso de acordo com o produto
+    if price_id == 'price_1RpVq2EHsMKn9uoppjlZFH16':
+        success_url = 'https://learnmoredigitalcourse.com/lipovive-up1-stripe'
+    else:
+        success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
+
     session = stripe.checkout.Session.create(
         payment_method_types=['card'],
         line_items=[{'price': price_id, 'quantity': quantity}],
         mode='payment',
         customer_creation='always',
         customer_email=customer_email,
-        success_url='https://learnmoredigitalcourse.com/pink-up1-stripe',
+        success_url=success_url,
         cancel_url='https://learnmoredigitalcourse.com/erro',
         # grava UTMs na própria Session
         metadata=utms,
@@ -116,19 +122,22 @@ async def stripe_webhook(request: Request):
             metadata=session.metadata
         )
 
-        # — Só cria invoice se tiver o produto certo
+        # — cria invoice se for um dos produtos suportados
         product_ids = [item.price.product for item in session.line_items.data]
-        if "prod_SiUIZzdFIN9fmS" in product_ids:
+        supported = ["prod_SiUIZzdFIN9fmS", "prod_Sl1txUkU7Uo3pO"]
+        intersect = [pid for pid in product_ids if pid in supported]
+        if intersect:
+            target_product = intersect[0]
             try:
-                print(f"🔔 [webhook] Barisland na sessão {session.id}")
+                print(f"🔔 [webhook] produto {target_product} na sessão {session.id}")
 
                 # 1) InvoiceItem para cada linha do checkout,
                 #    usando o price.id e a quantidade exata
                 for item in session.line_items.data:
                     stripe.InvoiceItem.create(
                         customer=cust,
-                        price=item.price.id,      # usa o mesmo price que o cliente pagou
-                        quantity=item.quantity    # mantém a quantidade
+                        price=item.price.id,
+                        quantity=item.quantity
                     )
 
                 # 2) Invoice com footer customizado
@@ -145,7 +154,7 @@ async def stripe_webhook(request: Request):
                         "digital.solutions.ooh@gmail.com"
                     ),
                     metadata={
-                        "product_id": "prod_SiUIZzdFIN9fmS",
+                        "product_id": target_product,
                         **session.metadata
                     }
                 )
@@ -185,6 +194,14 @@ async def stripe_webhook(request: Request):
                 return JSONResponse(status_code=200, content={"received": True})
 
     return JSONResponse({"received": True})
+
+@app.post("/track-paypal")
+async def track_paypal(request: Request):
+    data = await request.json()  # vai receber { utm_source, utm_medium, … }
+    stripe.api_key = STRIPE_SECRET_KEY
+    # Só para guardar as UTMs como metadata de um Customer vazio
+    stripe.Customer.create(metadata=data)
+    return JSONResponse({"status": "ok"})
 
 if __name__ == "__main__":
     import uvicorn
