@@ -197,10 +197,20 @@ async def stripe_webhook(request: Request):
 
 @app.post("/track-paypal")
 async def track_paypal(request: Request):
-    data = await request.json()  # vai receber { utm_source, utm_medium, … }
+    data = await request.json()  # recebe { utm_source, utm_medium, …, email? }
     stripe.api_key = STRIPE_SECRET_KEY
-    # Só para guardar as UTMs como metadata de um Customer vazio
-    stripe.Customer.create(metadata=data)
+
+    # Separa só as chaves que começam com "utm_"
+    utm_metadata = { k: v for k, v in data.items() if k.startswith("utm_") }
+
+    # Cria um Customer já com e‑mail e metadata de UTMs + origem
+    stripe.Customer.create(
+        email=data.get("email"),
+        metadata={
+            **utm_metadata,
+            "origin": "paypal"
+        }
+    )
     return JSONResponse({"status": "ok"})
 
 if __name__ == "__main__":
