@@ -50,7 +50,10 @@ async def create_checkout_session(request: Request):
         return JSONResponse(status_code=400, content={"error": "price_id is required"})
 
     # escolhe a URL de sucesso de acordo com o produto
-    if price_id == 'price_1RpVq2EHsMKn9uoppjlZFH16':
+    if price_id in (
+    'price_1RpVq2EHsMKn9uoppjlZFH16',
+    'price_1RpzFgEHsMKn9uop8tE1USBk'
+    ):
         success_url = 'https://learnmoredigitalcourse.com/lipovive-up1-stripe'
     else:
         success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
