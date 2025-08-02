@@ -127,26 +127,28 @@ async def stripe_webhook(request: Request):
 
         # — cria invoice se for um dos produtos suportados
         product_ids = [item.price.product for item in session.line_items.data]
-        supported = ["prod_SiUIZzdFIN9fmS", "prod_Sl1txUkU7Uo3pO"]
-        intersect = [pid for pid in product_ids if pid in supported]
+        supported   = ["prod_SiUIZzdFIN9fmS", "prod_Sl1txUkU7Uo3pO"]
+        intersect   = [pid for pid in product_ids if pid in supported]
         if intersect:
             target_product = intersect[0]
             try:
                 print(f"🔔 [webhook] produto {target_product} na sessão {session.id}")
-
+        
                 # 1) InvoiceItem para cada linha do checkout,
-                #    usando o price.id e a quantidade exata
+                #    usando o subtotal (em centavos) e moeda da sessão
                 for item in session.line_items.data:
-                    stripe.InvoiceItem.create(
+                    ii = stripe.InvoiceItem.create(
                         customer=cust,
                         amount=item.amount_subtotal,
-                        currency=session.currency
+                        currency=session.currency,
+                        description=f"{item.description} (Session {session.id})"
                     )
-
-                # 2) Invoice com footer customizado
+                    print(f"   → InvoiceItem criado: {ii.id}, valor: {ii.amount/100:.2f} {ii.currency.upper()}")
+        
+                # 2) Cria a Invoice em draft (não auto‐advance)
                 invoice = stripe.Invoice.create(
                     customer=cust,
-                    auto_advance=True,
+                    auto_advance=False,
                     collection_method="send_invoice",
                     days_until_due=0,
                     footer=(
@@ -161,9 +163,13 @@ async def stripe_webhook(request: Request):
                         **session.metadata
                     }
                 )
-                print(f"   → Invoice criada: {invoice.id}, valor devida: {invoice.amount_due/100:.2f} {invoice.currency.upper()}")
+                print(f"   → Invoice draft criada: {invoice.id}, subtotal: {invoice.subtotal/100:.2f} {invoice.currency.upper()}")
+        
+                # 3) Finaliza a Invoice para agregar todos os InvoiceItems
+                finalized = stripe.Invoice.finalize_invoice(invoice.id)
+                print(f"   → Invoice finalizada: {finalized.id}, valor devida: {finalized.amount_due/100:.2f} {finalized.currency.upper()}")
 
-                # 3) Conversions API: Purchase
+                # 4) Conversions API: Purchase
                 email_hash = hashlib.sha256(
                     session.customer_details.email.encode('utf-8')
                 ).hexdigest()
