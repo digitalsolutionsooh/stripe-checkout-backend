@@ -202,18 +202,37 @@ async def stripe_webhook(request: Request):
 
 @app.post("/track-paypal")
 async def track_paypal(request: Request):
-    data = await request.json()  # recebe { utm_source, utm_medium, …, email? }
+    raw_body = await request.body()
+    # 1) Validação back-and-forth com o PayPal
+    verify = requests.post(
+        "https://ipnpb.paypal.com/cgi-bin/webscr",
+        data=b"cmd=_notify-validate&" + raw_body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+    if verify.text != "VERIFIED":
+        return JSONResponse(status_code=400, content={"status": "invalid ipn"})
+
+    # 2) Agora podemos parsear os dados do IPN
+    form = dict(urllib.parse.parse_qsl(raw_body.decode()))
+    # coletar utms: se você incluía como query-params no link de checkout,
+    # o PayPal repassa dentro do campo `custom` ou `item_name`, etc.
+
+    # exemplo de extração:
+    utm_source   = form.get("custom_utm_source", "")
+    utm_campaign = form.get("custom_utm_campaign", "")
+    # … idem para utm_medium, utm_term, utm_content
+
+    # 3) Criar o cliente na Stripe
     stripe.api_key = STRIPE_SECRET_KEY
-
-    # Separa só as chaves que começam com "utm_"
-    utm_metadata = { k: v for k, v in data.items() if k.startswith("utm_") }
-
-    # Cria um Customer já com e‑mail e metadata de UTMs + origem
     stripe.Customer.create(
-        email=data.get("email"),
+        email=form.get("payer_email"),
         metadata={
-            **utm_metadata,
-            "origin": "paypal"
+            "utm_source":   utm_source,
+            "utm_medium":   form.get("custom_utm_medium", ""),
+            "utm_campaign": utm_campaign,
+            "utm_term":     form.get("custom_utm_term", ""),
+            "utm_content":  form.get("custom_utm_content", ""),
+            "origin":      "paypal"
         }
     )
     return JSONResponse({"status": "ok"})
