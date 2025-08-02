@@ -139,8 +139,10 @@ async def stripe_webhook(request: Request):
                 for item in session.line_items.data:
                     stripe.InvoiceItem.create(
                         customer=cust,
-                        price=item.price.id,
-                        quantity=item.quantity
+                        pricing=[{
+                            "price":    item.price.id,
+                            "quantity": item.quantity
+                        }]
                     )
 
                 # 2) Invoice com footer customizado
