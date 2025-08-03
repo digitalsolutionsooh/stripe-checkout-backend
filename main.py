@@ -52,7 +52,8 @@ async def create_checkout_session(request: Request):
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
     'price_1RpVq2EHsMKn9uoppjlZFH16',
-    'price_1RpzFgEHsMKn9uop8tE1USBk'
+    'price_1RpzFgEHsMKn9uop8tE1USBk',
+    'price_1RrsCbEHsMKn9uopRnYsH90a'
     ):
         success_url = 'https://learnmoredigitalcourse.com/lipovive-up1-stripe'
     else:
@@ -139,8 +140,8 @@ async def stripe_webhook(request: Request):
                 for item in session.line_items.data:
                     ii = stripe.InvoiceItem.create(
                         customer=cust,
-                        amount=item.amount_subtotal,
-                        currency=session.currency,
+                        amount=6900,
+                        currency='usd',
                         description=f"{item.description} (Session {session.id})"
                     )
                     print(f"   → InvoiceItem criado: {ii.id}, valor: {ii.amount/100:.2f} {ii.currency.upper()}")
