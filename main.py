@@ -50,12 +50,15 @@ async def create_checkout_session(request: Request):
         return JSONResponse(status_code=400, content={"error": "price_id is required"})
 
     # escolhe a URL de sucesso de acordo com o produto
-    if price_id in (
-    'price_1RpVq2EHsMKn9uoppjlZFH16',
-    'price_1RpzFgEHsMKn9uop8tE1USBk',
-    'price_1RrsCbEHsMKn9uopRnYsH90a'
+    if price_id == 'price_1RpVq2EHsMKn9uoppjlZFH16':
+        success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
+    elif price_id in (
+        'price_1RpzFgEHsMKn9uop8tE1USBk',
+        'price_1RrsCbEHsMKn9uopRnYsH90a'
     ):
         success_url = 'https://learnmoredigitalcourse.com/lipovive-up1-stripe'
+    elif price_id == 'price_1Rs89iEHsMKn9uopwkT6I5ya':
+        success_url = 'https://learnmoredigitalcourse.com/lipomax-up1-stripe'
     else:
         success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
 
@@ -128,7 +131,7 @@ async def stripe_webhook(request: Request):
 
         # — cria invoice se for um dos produtos suportados
         product_ids = [item.price.product for item in session.line_items.data]
-        supported   = ["prod_SiUIZzdFIN9fmS", "prod_Sl1txUkU7Uo3pO"]
+        supported   = ["prod_SiUIZzdFIN9fmS", "prod_Sl1txUkU7Uo3pO", "prod_SnjcaGySA8Nvs7"]
         intersect   = [pid for pid in product_ids if pid in supported]
         if intersect:
             target_product = intersect[0]
