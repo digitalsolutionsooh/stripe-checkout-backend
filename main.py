@@ -135,13 +135,19 @@ async def stripe_webhook(request: Request):
             try:
                 print(f"🔔 [webhook] produto {target_product} na sessão {session.id}")
         
+                # 0) force o customer a faturar na moeda da sessão
+                stripe.Customer.modify(
+                    cust,
+                    invoice_settings={"default_currency": session.currency}
+                )
+        
                 # 1) InvoiceItem para cada linha do checkout,
                 #    usando o subtotal (em centavos) e moeda da sessão
                 for item in session.line_items.data:
                     ii = stripe.InvoiceItem.create(
                         customer=cust,
-                        amount=6900,
-                        currency='usd',
+                        amount=item.amount_subtotal,
+                        currency=session.currency,
                         description=f"{item.description} (Session {session.id})"
                     )
                     print(f"   → InvoiceItem criado: {ii.id}, valor: {ii.amount/100:.2f} {ii.currency.upper()}")
