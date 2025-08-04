@@ -100,11 +100,13 @@ async def create_checkout_session(request: Request):
         }
       }]
     }
-    requests.post(
+    # envia e loga o response para debug
+    resp = requests.post(
       f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
       params={"access_token": ACCESS_TOKEN},
       json=event_payload
     )
+    print("→ InitiateCheckout event sent:", resp.status_code, resp.text)
 
     return {"checkout_url": session.url}
 
@@ -112,106 +114,118 @@ async def create_checkout_session(request: Request):
 async def stripe_webhook(request: Request):
     payload = await request.body()
     sig     = request.headers.get("stripe-signature", "")
+
+    # 1) Garante que podemos chamar a API do Stripe
+    stripe.api_key = STRIPE_SECRET_KEY
+
+    # 2) Valida a assinatura do webhook
     try:
         event = stripe.Webhook.construct_event(payload, sig, WEBHOOK_SECRET)
     except stripe.error.SignatureVerificationError as e:
         print("⚠️ Webhook signature mismatch:", e)
         raise HTTPException(400, "Invalid webhook signature")
 
+    # 3) Se for checkout.session.completed, processa
     if event["type"] == "checkout.session.completed":
         session = stripe.checkout.Session.retrieve(
-            event["data"]["object"]["id"], expand=["line_items"]
+            event["data"]["object"]["id"],
+            expand=["line_items"]
         )
         cust = session["customer"]
 
-        stripe.Customer.modify(
-            cust,
-            metadata=session.metadata
-        )
+        # 3.1) Primeiro, guarda as UTMs no Customer
+        stripe.Customer.modify(cust, metadata=session.metadata)
 
-        # — cria invoice se for um dos produtos suportados
-        product_ids = [item.price.product for item in session.line_items.data]
-        supported   = ["prod_SiUIZzdFIN9fmS", "prod_Sl1txUkU7Uo3pO", "prod_SnjcaGySA8Nvs7"]
-        intersect   = [pid for pid in product_ids if pid in supported]
-        if intersect:
-            target_product = intersect[0]
-            try:
-                print(f"🔔 [webhook] produto {target_product} na sessão {session.id}")
-        
-                # 0) force o customer a faturar na moeda da sessão
-                stripe.Customer.modify(
-                    cust,
-                    invoice_settings={"default_currency": session.currency}
-                )
-        
-                # 1) InvoiceItem para cada linha do checkout,
-                #    usando o subtotal (em centavos) e moeda da sessão
-                for item in session.line_items.data:
-                    ii = stripe.InvoiceItem.create(
-                        customer=cust,
-                        amount=item.amount_subtotal,
-                        currency=session.currency,
-                        description=f"{item.description} (Session {session.id})"
-                    )
-                    print(f"   → InvoiceItem criado: {ii.id}, valor: {ii.amount/100:.2f} {ii.currency.upper()}")
-        
-                # 2) Cria a Invoice em draft (não auto‐advance)
-                invoice = stripe.Invoice.create(
-                    customer=cust,
-                    auto_advance=False,
-                    collection_method="send_invoice",
-                    days_until_due=0,
-                    footer=(
-                        "Thank you for purchasing the formula. To access the material, "
-                        "simply click on the link and follow the instructions: "
-                        "https://burnjaroformula.online/members/\n\n"
-                        "If you have any questions, please send an email to: "
-                        "digital.solutions.ooh@gmail.com"
-                    ),
-                    metadata={
-                        "product_id": target_product,
-                        **session.metadata
-                    }
-                )
-                print(f"   → Invoice draft criada: {invoice.id}, subtotal: {invoice.subtotal/100:.2f} {invoice.currency.upper()}")
-        
-                # 3) Finaliza a Invoice para agregar todos os InvoiceItems
-                finalized = stripe.Invoice.finalize_invoice(invoice.id)
-                print(f"   → Invoice finalizada: {finalized.id}, valor devida: {finalized.amount_due/100:.2f} {finalized.currency.upper()}")
-
-                # 4) Conversions API: Purchase
-                email_hash = hashlib.sha256(
-                    session.customer_details.email.encode('utf-8')
-                ).hexdigest()
-                purchase_payload = {
-                    "data": [{
-                        "event_name":    "Purchase",
-                        "event_time":    int(time.time()),
-                        "event_id":      session.id,
-                        "action_source": "website",
-                        "event_source_url": session.url,
-                        "user_data": {"em": email_hash},
-                        "custom_data": {
-                            "currency": session.currency,
-                            "value":    session.amount_total / 100.0,
-                            "content_ids": [li.price.id for li in session.line_items.data],
-                            "content_type": "product"
-                        }
-                    }]
+        # 3.2) Prepara o payload de Purchase para o Meta
+        email_hash = hashlib.sha256(
+            session.customer_details.email.encode("utf-8")
+        ).hexdigest()
+        purchase_payload = {
+            "data": [{
+                "event_name":    "Purchase",
+                "event_time":    int(time.time()),
+                "event_id":      session.id,
+                "action_source": "website",
+                "event_source_url": session.url,
+                "user_data":     {"em": email_hash},
+                "custom_data":   {
+                    "currency":     session.currency,
+                    "value":        session.amount_total / 100.0,
+                    "content_ids":  [li.price.id for li in session.line_items.data],
+                    "content_type": "product"
                 }
-                requests.post(
-                    f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
-                    params={"access_token": ACCESS_TOKEN},
-                    json=purchase_payload
+            }]
+        }
+
+        # 3.3) Tenta criar a invoice e seus items
+        try:
+            print(f"🔔 [webhook] criando invoice para sessão {session.id}")
+
+            # 0) força moeda da invoice igual à da sessão
+            stripe.Customer.modify(
+                cust,
+                invoice_settings={"default_currency": session.currency}
+            )
+
+            # 1) InvoiceItem para cada linha
+            for item in session.line_items.data:
+                ii = stripe.InvoiceItem.create(
+                    customer=cust,
+                    amount=item.amount_subtotal,
+                    currency=session.currency,
+                    description=f"{item.description} (Session {session.id})"
+                )
+                print(
+                    f"   → InvoiceItem criado: {ii.id}, "
+                    f"valor: {ii.amount/100:.2f} {ii.currency.upper()}"
                 )
 
-            except Exception as e:
-                import traceback
-                print("‼️ Erro no webhook checkout.session.completed:", e)
-                print(traceback.format_exc())
-                # devolve 200 pra Stripe parar de re-tentar
-                return JSONResponse(status_code=200, content={"received": True})
+            # 2) Cria a Invoice em draft (não auto-advance)
+            invoice = stripe.Invoice.create(
+                customer=cust,
+                auto_advance=False,
+                collection_method="send_invoice",
+                days_until_due=0,
+                footer=(
+                    "Thank you for purchasing the formula. To access the material, "
+                    "simply click on the link and follow the instructions: "
+                    "https://burnjaroformula.online/members/\n\n"
+                    "If you have any questions, please send an email to: "
+                    "digital.solutions.ooh@gmail.com"
+                ),
+                metadata={
+                    "product_id": target_product,
+                    **session.metadata
+                }
+            )
+            print(
+                f"   → Invoice draft criada: {invoice.id}, "
+                f"subtotal: {invoice.subtotal/100:.2f} {invoice.currency.upper()}"
+            )
 
+            # 3) Finaliza a Invoice para agregar todos os InvoiceItems
+            finalized = stripe.Invoice.finalize_invoice(invoice.id)
+            print(
+                f"   → Invoice finalizada: {finalized.id}, "
+                f"valor devida: {finalized.amount_due/100:.2f} "
+                f"{finalized.currency.upper()}"
+            )
+
+        except Exception as e:
+            import traceback
+            print("‼️ Erro criando invoice:", e)
+            print(traceback.format_exc())
+
+        finally:
+            # 4) Mesmo se der erro acima, sempre envia o evento Purchase
+            resp = requests.post(
+                f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
+                params={"access_token": ACCESS_TOKEN},
+                json=purchase_payload
+            )
+            print("→ Purchase event sent:", resp.status_code, resp.text)
+
+    # 5) Retorna 200 sempre
     return JSONResponse({"received": True})
 
 @app.post("/track-paypal")
