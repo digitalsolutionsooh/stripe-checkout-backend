@@ -240,27 +240,54 @@ async def track_paypal(request: Request):
     if verify.text != "VERIFIED":
         return JSONResponse(status_code=400, content={"status": "invalid ipn"})
 
-    # 2) Agora podemos parsear os dados do IPN
+    # 2) Parse dos dados do IPN
     form = dict(urllib.parse.parse_qsl(raw_body.decode()))
-    # coletar utms: se você incluía como query-params no link de checkout,
-    # o PayPal repassa dentro do campo `custom` ou `item_name`, etc.
-
-    # exemplo de extração:
     utm_source   = form.get("custom_utm_source", "")
+    utm_medium   = form.get("custom_utm_medium", "")
     utm_campaign = form.get("custom_utm_campaign", "")
-    # … idem para utm_medium, utm_term, utm_content
+    utm_term     = form.get("custom_utm_term", "")
+    utm_content  = form.get("custom_utm_content", "")
 
-    # 3) Criar o cliente na Stripe
+    # ───────────────────────────────────────────────────────────
+    # 2.5) Dispara o Purchase para a Meta (Facebook) Conversion API
+    purchase_payload = {
+      "data": [{
+        "event_name":    "Purchase",
+        "event_time":    int(time.time()),
+        "event_id":      form.get("txn_id", ""),              # ID da transação PayPal
+        "action_source": "website",
+        "event_source_url": form.get("return_url", ""),
+        "user_data": {
+          "em": hashlib.sha256(
+                  form.get("payer_email", "").encode("utf-8")
+                ).hexdigest()
+        },
+        "custom_data": {
+          "currency": form.get("mc_currency", ""),
+          "value":    float(form.get("mc_gross", 0)),
+          "content_ids": [ form.get("item_number", "") ],
+          "content_type": "product"
+        }
+      }]
+    }
+    requests.post(
+      f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
+      params={"access_token": ACCESS_TOKEN},
+      json=purchase_payload
+    )
+    # ───────────────────────────────────────────────────────────
+
+    # 3) Cria o cliente na Stripe
     stripe.api_key = STRIPE_SECRET_KEY
     stripe.Customer.create(
         email=form.get("payer_email"),
         metadata={
             "utm_source":   utm_source,
-            "utm_medium":   form.get("custom_utm_medium", ""),
+            "utm_medium":   utm_medium,
             "utm_campaign": utm_campaign,
-            "utm_term":     form.get("custom_utm_term", ""),
-            "utm_content":  form.get("custom_utm_content", ""),
-            "origin":      "paypal"
+            "utm_term":     utm_term,
+            "utm_content":  utm_content,
+            "origin":       "paypal"
         }
     )
     return JSONResponse({"status": "ok"})
