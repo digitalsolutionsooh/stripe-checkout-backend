@@ -291,58 +291,19 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 4.1) Envia atualização do pedido como "paid" à UTMify
-            utmify_order_paid = {
-              "orderId":       session.id,
-              "platform":      "Stripe",
-              "paymentMethod": "credit_card",  # ou dinâmico, se preferir
-              "status":        "paid",
-              "createdAt":     original_created_at,   # mesmo timestamp usado no primeiro POST
-              "approvedDate":  time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
-              "refundedAt":    None,
-              "customer": {
-                "name":     session.customer_details.name  or "",
-                "email":    session.customer_details.email,
-                "phone":    session.customer_details.phone or None,
-                "document": None
-              },
-              "products": [
-                {
-                  "id":            li.price.id,
-                  "name":          li.description or li.price.id,
-                  "planId":        li.price.id,
-                  "planName":      li.price.nickname or None,
-                  "quantity":      li.quantity,
-                  "priceInCents":  li.amount_subtotal
-                }
-                for li in session.line_items.data
-              ],
-              "trackingParameters": {
-                "src":            None,
-                "sck":            None,
-                "utm_source":     session.metadata.get("utm_source"),
-                "utm_medium":     session.metadata.get("utm_medium"),
-                "utm_campaign":   session.metadata.get("utm_campaign"),
-                "utm_content":    session.metadata.get("utm_content"),
-                "utm_term":       session.metadata.get("utm_term"),
-                "utm_campaign_id": session.metadata.get("utm_campaign_id"),
-                "utm_term_id":     session.metadata.get("utm_term_id"),
-                "utm_content_id":  session.metadata.get("utm_content_id")
-              },
-              "commission": {
-                "totalPriceInCents":     session.amount_total,
-                "gatewayFeeInCents":     0,
-                "userCommissionInCents": 0,
-                "currency":              session.currency.upper()
-              }
+            # 4.1) Atualiza status e approvedDate – sem mexer em commission
+            utmify_update = {
+              "orderId":      session.id,
+              "status":       "paid",
+              "approvedDate": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
             }
-            resp_utm = requests.post(
-              UTMIFY_API_URL,
+            resp_utm = requests.patch(
+              f"{UTMIFY_API_URL}/{session.id}",
               headers={
                 "Content-Type": "application/json",
                 "x-api-token":  UTMIFY_API_KEY
               },
-              json=utmify_order_paid
+              json=utmify_update
             )
             print("→ Pedido atualizado como pago na UTMify:", resp_utm.status_code, resp_utm.text)
 
