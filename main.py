@@ -6,6 +6,7 @@ import stripe
 import time
 import hashlib
 import requests
+import urllib.parse
 
 app = FastAPI()
 
@@ -24,6 +25,8 @@ STRIPE_SECRET_KEY   = os.getenv("STRIPE_SECRET_KEY")
 WEBHOOK_SECRET      = os.getenv("STRIPE_WEBHOOK_SECRET")
 PIXEL_ID            = os.getenv("PIXEL_ID")
 ACCESS_TOKEN        = os.getenv("ACCESS_TOKEN")
+UTMIFY_API_URL      = os.getenv("UTMIFY_API_URL")
+UTMIFY_API_KEY      = os.getenv("UTMIFY_API_KEY")
 
 @app.get("/health")
 async def health():
@@ -43,7 +46,10 @@ async def create_checkout_session(request: Request):
     customer_email = body.get("customer_email")
     # coletamos os UTMs
     utms = { k: body.get(k, "") for k in (
-        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"
+        "utm_source", "utm_medium",
+        "utm_campaign", "utm_campaign_id",
+        "utm_term",   "utm_term_id",
+        "utm_content","utm_content_id"
     ) }
 
     if not price_id:
@@ -107,6 +113,28 @@ async def create_checkout_session(request: Request):
       json=event_payload
     )
     print("→ InitiateCheckout event sent:", resp.status_code, resp.text)
+
+    # ──────────────────────────────────────────────────
+    #  Envia InitiateCheckout também ao UTMify
+    utmify_payload = {
+      "event":    "initiate_checkout",
+      "order_id": session.id,
+      "revenue":  session.amount_total / 100.0,
+      "currency": session.currency.upper(),
+      "url":      session.url,
+      "utm":      session.metadata,
+      "items":    [item.price.id for item in session.line_items.data]
+    }
+    resp_utm = requests.post(
+      UTMIFY_API_URL,
+      headers={
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer {UTMIFY_API_KEY}"
+      },
+      json=utmify_payload
+    )
+    print("→ InitiateCheckout enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
+    # ──────────────────────────────────────────────────
 
     return {"checkout_url": session.url}
 
@@ -225,6 +253,26 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
+            # 4.1) Envia Purchase também ao UTMify
+            utmify_purchase = {
+              "event":    "purchase",
+              "order_id": session.id,
+              "revenue":  session.amount_total / 100.0,
+              "currency": session.currency.upper(),
+              "url":      session.url,
+              "utm":      session.metadata,
+              "items":    [li.price.id for li in session.line_items.data]
+            }
+            resp_utm = requests.post(
+              UTMIFY_API_URL,
+              headers={
+                "Content-Type":  "application/json",
+                "Authorization": f"Bearer {UTMIFY_API_KEY}"
+              },
+              json=utmify_purchase
+            )
+            print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
+
     # 5) Retorna 200 sempre
     return JSONResponse({"received": True})
 
@@ -242,11 +290,14 @@ async def track_paypal(request: Request):
 
     # 2) Parse dos dados do IPN
     form = dict(urllib.parse.parse_qsl(raw_body.decode()))
-    utm_source   = form.get("custom_utm_source", "")
-    utm_medium   = form.get("custom_utm_medium", "")
-    utm_campaign = form.get("custom_utm_campaign", "")
-    utm_term     = form.get("custom_utm_term", "")
-    utm_content  = form.get("custom_utm_content", "")
+    utm_source       = form.get("custom_utm_source", "")
+    utm_medium       = form.get("custom_utm_medium", "")
+    utm_campaign     = form.get("custom_utm_campaign", "")
+    utm_term         = form.get("custom_utm_term", "")
+    utm_content      = form.get("custom_utm_content", "")
+    utm_campaign_id  = form.get("custom_utm_campaign_id", "")
+    utm_term_id      = form.get("custom_utm_term_id", "")
+    utm_content_id   = form.get("custom_utm_content_id", "")
 
     # ───────────────────────────────────────────────────────────
     # 2.5) Dispara o Purchase para a Meta (Facebook) Conversion API
@@ -275,6 +326,36 @@ async def track_paypal(request: Request):
       params={"access_token": ACCESS_TOKEN},
       json=purchase_payload
     )
+
+    # 2.5.1) Envia Purchase também ao UTMify
+    utmify_payload = {
+      "event":    "purchase",
+      "order_id": form.get("txn_id", ""),
+      "revenue":  float(form.get("mc_gross", 0)),
+      "currency": form.get("mc_currency", ""),
+      "url":      form.get("return_url", ""),
+      "utm": {
+        "utm_source":       utm_source,
+        "utm_medium":       utm_medium,
+        "utm_campaign":     utm_campaign,
+        "utm_campaign_id":  utm_campaign_id,
+        "utm_term":         utm_term,
+        "utm_term_id":      utm_term_id,
+        "utm_content":      utm_content,
+        "utm_content_id":   utm_content_id
+      },
+      "items":    [form.get("item_number", "")]
+    }
+    resp_utm = requests.post(
+      UTMIFY_API_URL,
+      headers={
+        "Content-Type":  "application/json",
+        "Authorization": f"Bearer {UTMIFY_API_KEY}"
+      },
+      json=utmify_payload
+    )
+    print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
+    
     # ───────────────────────────────────────────────────────────
 
     # 3) Cria o cliente na Stripe
