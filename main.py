@@ -7,6 +7,9 @@ import time
 import hashlib
 import requests
 import urllib.parse
+import hmac, base64
+import json
+
 
 app = FastAPI()
 
@@ -115,7 +118,7 @@ async def create_checkout_session(request: Request):
     print("→ InitiateCheckout event sent:", resp.status_code, resp.text)
 
     # ──────────────────────────────────────────────────
-    #  Envia InitiateCheckout também ao UTMify
+    #  Envia InitiateCheckout também ao UTMify (com assinatura HMAC-SHA256)
     utmify_payload = {
       "event":    "initiate_checkout",
       "order_id": session.id,
@@ -125,13 +128,24 @@ async def create_checkout_session(request: Request):
       "utm":      session.metadata,
       "items":    [item.price.id for item in session.line_items.data]
     }
+    # 1) Serializa payload exato
+    body_str = json.dumps(utmify_payload, separators=(",",":"), ensure_ascii=False)
+    # 2) Gera assinatura HMAC-SHA256 em Base64
+    signature_b64 = base64.b64encode(
+        hmac.new(
+            UTMIFY_API_KEY.encode("utf-8"),
+            body_str.encode("utf-8"),
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
+    # 3) Envia com header correto
     resp_utm = requests.post(
-      UTMIFY_API_URL,
-      headers={
-        "Content-Type":  "application/json",
-        "Authorization": f"api_key={UTMIFY_API_KEY}"
-      },
-      json=utmify_payload
+        UTMIFY_API_URL,
+        headers={
+            "Content-Type":  "application/json",
+            "Authorization": f"HMAC-SHA256 {signature_b64}"
+        },
+        data=body_str
     )
     print("→ InitiateCheckout enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     # ──────────────────────────────────────────────────
@@ -253,7 +267,7 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 4.1) Envia Purchase também ao UTMify
+            # 4.1) Envia Purchase também ao UTMify (assinatura HMAC-SHA256)
             utmify_purchase = {
               "event":    "purchase",
               "order_id": session.id,
@@ -263,13 +277,24 @@ async def stripe_webhook(request: Request):
               "utm":      session.metadata,
               "items":    [li.price.id for li in session.line_items.data]
             }
+            # 1) Serializa payload exato
+            body_str = json.dumps(utmify_purchase, separators=(",",":"), ensure_ascii=False)
+            # 2) Gera assinatura HMAC-SHA256 em Base64
+            signature_b64 = base64.b64encode(
+                hmac.new(
+                    UTMIFY_API_KEY.encode("utf-8"),
+                    body_str.encode("utf-8"),
+                    hashlib.sha256
+                ).digest()
+            ).decode("utf-8")
+            # 3) Envia com header correto e body assinado
             resp_utm = requests.post(
-              UTMIFY_API_URL,
-              headers={
-                "Content-Type":  "application/json",
-                "Authorization": f"api_key={UTMIFY_API_KEY}"
-              },
-              json=utmify_purchase
+                UTMIFY_API_URL,
+                headers={
+                    "Content-Type":  "application/json",
+                    "Authorization": f"HMAC-SHA256 {signature_b64}"
+                },
+                data=body_str
             )
             print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
 
@@ -327,7 +352,7 @@ async def track_paypal(request: Request):
       json=purchase_payload
     )
 
-    # 2.5.1) Envia Purchase também ao UTMify
+    # 2.5.1) Envia Purchase também ao UTMify (assinatura HMAC-SHA256)
     utmify_payload = {
       "event":    "purchase",
       "order_id": form.get("txn_id", ""),
@@ -346,13 +371,24 @@ async def track_paypal(request: Request):
       },
       "items":    [form.get("item_number", "")]
     }
+    # 1) Serializa payload exato
+    body_str = json.dumps(utmify_payload, separators=(",",":"), ensure_ascii=False)
+    # 2) Gera assinatura HMAC-SHA256 em Base64
+    signature_b64 = base64.b64encode(
+        hmac.new(
+            UTMIFY_API_KEY.encode("utf-8"),
+            body_str.encode("utf-8"),
+            hashlib.sha256
+        ).digest()
+    ).decode("utf-8")
+    # 3) Envia com header correto e body assinado
     resp_utm = requests.post(
-      UTMIFY_API_URL,
-      headers={
-        "Content-Type":  "application/json",
-        "Authorization": f"api_key={UTMIFY_API_KEY}"
-      },
-      json=utmify_payload
+        UTMIFY_API_URL,
+        headers={
+            "Content-Type":  "application/json",
+            "Authorization": f"HMAC-SHA256 {signature_b64}"
+        },
+        data=body_str
     )
     print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     
