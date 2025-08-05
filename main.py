@@ -195,6 +195,8 @@ async def stripe_webhook(request: Request):
             event["data"]["object"]["id"],
             expand=["line_items"]
         )
+        # captura o createdAt original a partir do timestamp da session:
+        original_created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(session.created))
         cust = session["customer"]
 
         # 3.1) Primeiro, guarda as UTMs no Customer
@@ -289,21 +291,60 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 4.1) Atualiza order no UTMify como pago
-            utmify_update = {
-              "orderId":      session.id,
-              "status":       "paid",
-              "approvedDate": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+            # 4.1) Envia atualização do pedido como "paid" à UTMify
+            utmify_order_paid = {
+              "orderId":       session.id,
+              "platform":      "Stripe",
+              "paymentMethod": "credit_card",  # ou dinâmico, se preferir
+              "status":        "paid",
+              "createdAt":     original_created_at,   # mesmo timestamp usado no primeiro POST
+              "approvedDate":  time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+              "refundedAt":    None,
+              "customer": {
+                "name":     session.customer_details.name  or "",
+                "email":    session.customer_details.email,
+                "phone":    session.customer_details.phone or None,
+                "document": None
+              },
+              "products": [
+                {
+                  "id":            li.price.id,
+                  "name":          li.description or li.price.id,
+                  "planId":        li.price.id,
+                  "planName":      li.price.nickname or None,
+                  "quantity":      li.quantity,
+                  "priceInCents":  li.amount_subtotal
+                }
+                for li in session.line_items.data
+              ],
+              "trackingParameters": {
+                "src":            None,
+                "sck":            None,
+                "utm_source":     session.metadata.get("utm_source"),
+                "utm_medium":     session.metadata.get("utm_medium"),
+                "utm_campaign":   session.metadata.get("utm_campaign"),
+                "utm_content":    session.metadata.get("utm_content"),
+                "utm_term":       session.metadata.get("utm_term"),
+                "utm_campaign_id": session.metadata.get("utm_campaign_id"),
+                "utm_term_id":     session.metadata.get("utm_term_id"),
+                "utm_content_id":  session.metadata.get("utm_content_id")
+              },
+              "commission": {
+                "totalPriceInCents":     session.amount_total,
+                "gatewayFeeInCents":     0,
+                "userCommissionInCents": 0,
+                "currency":              session.currency.upper()
+              }
             }
-            resp_utm = requests.patch(
-              f"{UTMIFY_API_URL}/{session.id}",
+            resp_utm = requests.post(
+              UTMIFY_API_URL,
               headers={
                 "Content-Type": "application/json",
                 "x-api-token":  UTMIFY_API_KEY
               },
-              json=utmify_update
+              json=utmify_order_paid
             )
-            print("→ Order atualizado no UTMify:", resp_utm.status_code, resp_utm.text)
+            print("→ Pedido atualizado como pago na UTMify:", resp_utm.status_code, resp_utm.text)
 
     # 5) Retorna 200 sempre
     return JSONResponse({"received": True})
@@ -359,22 +400,54 @@ async def track_paypal(request: Request):
       json=purchase_payload
     )
 
-    # ───────────────────────────────────────────────────────────
-    # 2.5.2) Atualiza order no UTMify como pago (PayPal)
-    utmify_update = {
-      "orderId":     form.get("txn_id", ""),
-      "status":      "paid",
-      "approvedDate": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-    }
-    resp_utm = requests.patch(
-      f"{UTMIFY_API_URL}/{form.get('txn_id')}",
-      headers={
-        "Content-Type": "application/json",
-        "x-api-token":  UTMIFY_API_KEY
+    # 2.5.1) Cria pedido inicial no UTMify (PayPal)
+    txn_id = form.get("txn_id", "")
+    created_at = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    utmify_order = {
+      "orderId":       txn_id,
+      "platform":      "PayPal",
+      "paymentMethod": "paypal",
+      "status":        "waiting_payment",
+      "createdAt":     created_at,
+      "approvedDate":  None,
+      "refundedAt":    None,
+      "customer": {
+        "email": form.get("payer_email", "")
       },
-      json=utmify_update
+      "products": [
+        {
+          "id":           form.get("item_number", ""),
+          "name":         form.get("item_name", ""),
+          "quantity":     int(form.get("quantity", 1)),
+          "priceInCents": int(float(form.get("mc_gross", 0)) * 100)
+        }
+      ],
+      "trackingParameters": {
+        "utm_source":      utm_source,
+        "utm_medium":      utm_medium,
+        "utm_campaign":    utm_campaign,
+        "utm_campaign_id": utm_campaign_id,
+        "utm_term":        utm_term,
+        "utm_term_id":     utm_term_id,
+        "utm_content":     utm_content,
+        "utm_content_id":  utm_content_id
+      },
+      "commission": {
+        "totalPriceInCents":     int(float(form.get("mc_gross", 0)) * 100),
+        "gatewayFeeInCents":     0,
+        "userCommissionInCents": 0,
+        "currency":              form.get("mc_currency", "").upper()
+      }
+    }
+    resp_utm = requests.post(
+      UTMIFY_API_URL,
+      headers={
+        "Content-Type":  "application/json",
+        "x-api-token":   UTMIFY_API_KEY
+      },
+      json=utmify_order
     )
-    print("→ Order atualizado no UTMify:", resp_utm.status_code, resp_utm.text)
+    print("→ Pedido inicial (PayPal) enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     # ───────────────────────────────────────────────────────────
 
     # 3) Cria o cliente na Stripe
