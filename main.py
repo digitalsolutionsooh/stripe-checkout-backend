@@ -291,14 +291,14 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 4.1) Atualiza status e approvedDate – sem mexer em commission
+            # 4.1) Atualiza status e approvedDate via POST
             utmify_update = {
               "orderId":      session.id,
               "status":       "paid",
               "approvedDate": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
             }
-            resp_utm = requests.patch(
-              f"{UTMIFY_API_URL}/{session.id}",
+            resp_utm = requests.post(
+              "https://api.utmify.com.br/api-credentials/orders",
               headers={
                 "Content-Type": "application/json",
                 "x-api-token":  UTMIFY_API_KEY
