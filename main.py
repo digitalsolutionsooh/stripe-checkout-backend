@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from decimal import Decimal
 import os
 import stripe
 import time
@@ -294,6 +295,10 @@ async def stripe_webhook(request: Request):
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
             # 4.1) Atualiza todo o order como "paid" — POST full payload
+            total = session.amount_total
+            fee = total * Decimal("0.0399")        
+            net   = total - fee      
+            
             utmify_order_paid = {
               "orderId":       session.id,
               "platform":      "Stripe",
@@ -329,7 +334,12 @@ async def stripe_webhook(request: Request):
                 "utm_content":    session.metadata.get("utm_content",""),
                 "utm_content_id": session.metadata.get("utm_content_id","")
               },
-              # note que NÃO incluímos o campo "commission" aqui
+             "commission": {
+                "totalPriceInCents":     float(total),  
+                "gatewayFeeInCents":     float(fee),
+                "userCommissionInCents": float(net),
+                "currency":              session.currency.upper()
+             }
             }
             
             resp_utm = requests.post(
