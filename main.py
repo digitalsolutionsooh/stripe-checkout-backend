@@ -118,36 +118,53 @@ async def create_checkout_session(request: Request):
     print("→ InitiateCheckout event sent:", resp.status_code, resp.text)
 
     # ──────────────────────────────────────────────────
-    #  Envia InitiateCheckout também ao UTMify (com assinatura HMAC-SHA256)
-    utmify_payload = {
-      "event":    "initiate_checkout",
-      "order_id": session.id,
-      "revenue":  session.amount_total / 100.0,
-      "currency": session.currency.upper(),
-      "url":      session.url,
-      "utm":      session.metadata,
-      "items":    [item.price.id for item in session.line_items.data]
+    #  Envia pedido (order) ao UTMify
+    utmify_order = {
+      "orderId":       session.id,
+      "platform":      "Stripe",
+      "paymentMethod": "card",
+      "status":        "waiting_payment",
+      "createdAt":     time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
+      "approvedDate":  None,
+      "refundedAt":    None,
+      "customer": {
+        "email": session.customer_details.email
+      },
+      "products": [
+        {
+          "id":            item.price.id,
+          "name":          item.description or item.price.id,
+          "quantity":      item.quantity,
+          "priceInCents":  item.amount_subtotal
+        }
+        for item in session.line_items.data
+      ],
+      "trackingParameters": {
+        "utm_source":       session.metadata.get("utm_source",""),
+        "utm_medium":       session.metadata.get("utm_medium",""),
+        "utm_campaign":     session.metadata.get("utm_campaign",""),
+        "utm_campaign_id":  session.metadata.get("utm_campaign_id",""),
+        "utm_term":         session.metadata.get("utm_term",""),
+        "utm_term_id":      session.metadata.get("utm_term_id",""),
+        "utm_content":      session.metadata.get("utm_content",""),
+        "utm_content_id":   session.metadata.get("utm_content_id","")
+      },
+      "commission": {
+        "totalPriceInCents":     session.amount_total,
+        "gatewayFeeInCents":     session.total_details.amount_fee,
+        "userCommissionInCents": session.amount_total - session.total_details.amount_fee,
+        "currency":              session.currency.upper()
+      }
     }
-    # 1) Serializa payload exato
-    body_str = json.dumps(utmify_payload, separators=(",",":"), ensure_ascii=False)
-    # 2) Gera assinatura HMAC-SHA256 em Base64
-    signature_b64 = base64.b64encode(
-        hmac.new(
-            UTMIFY_API_KEY.encode("utf-8"),
-            body_str.encode("utf-8"),
-            hashlib.sha256
-        ).digest()
-    ).decode("utf-8")
-    # 3) Envia com header correto
     resp_utm = requests.post(
-        UTMIFY_API_URL,
-        headers={
-            "Content-Type":  "application/json",
-            "x-api-key":    UTMIFY_API_KEY
-        },
-        json=utmify_payload
+      UTMIFY_API_URL,
+      headers={
+        "Content-Type": "application/json",
+        "x-api-token":  UTMIFY_API_KEY
+      },
+      json=utmify_order
     )
-    print("→ InitiateCheckout enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
+    print("→ Order enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     # ──────────────────────────────────────────────────
 
     return {"checkout_url": session.url}
@@ -267,36 +284,21 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 4.1) Envia Purchase também ao UTMify (assinatura HMAC-SHA256)
-            utmify_purchase = {
-              "event":    "purchase",
-              "order_id": session.id,
-              "revenue":  session.amount_total / 100.0,
-              "currency": session.currency.upper(),
-              "url":      session.url,
-              "utm":      session.metadata,
-              "items":    [li.price.id for li in session.line_items.data]
+            # 4.1) Atualiza order no UTMify como pago
+            utmify_update = {
+              "orderId":      session.id,
+              "status":       "paid",
+              "approvedDate": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
             }
-            # 1) Serializa payload exato
-            body_str = json.dumps(utmify_purchase, separators=(",",":"), ensure_ascii=False)
-            # 2) Gera assinatura HMAC-SHA256 em Base64
-            signature_b64 = base64.b64encode(
-                hmac.new(
-                    UTMIFY_API_KEY.encode("utf-8"),
-                    body_str.encode("utf-8"),
-                    hashlib.sha256
-                ).digest()
-            ).decode("utf-8")
-            # 3) Envia com header correto e body assinado
             resp_utm = requests.post(
-                UTMIFY_API_URL,
-                headers={
-                    "Content-Type":  "application/json",
-                    "x-api-key":    UTMIFY_API_KEY
-                },
-                json=utmify_payload
+              UTMIFY_API_URL,
+              headers={
+                "Content-Type": "application/json",
+                "x-api-token":  UTMIFY_API_KEY
+              },
+              json=utmify_update
             )
-            print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
+            print("→ Order atualizado no UTMify:", resp_utm.status_code, resp_utm.text)
 
     # 5) Retorna 200 sempre
     return JSONResponse({"received": True})
@@ -352,46 +354,22 @@ async def track_paypal(request: Request):
       json=purchase_payload
     )
 
-    # 2.5.1) Envia Purchase também ao UTMify (assinatura HMAC-SHA256)
-    utmify_payload = {
-      "event":    "purchase",
-      "order_id": form.get("txn_id", ""),
-      "revenue":  float(form.get("mc_gross", 0)),
-      "currency": form.get("mc_currency", ""),
-      "url":      form.get("return_url", ""),
-      "utm": {
-        "utm_source":       utm_source,
-        "utm_medium":       utm_medium,
-        "utm_campaign":     utm_campaign,
-        "utm_campaign_id":  utm_campaign_id,
-        "utm_term":         utm_term,
-        "utm_term_id":      utm_term_id,
-        "utm_content":      utm_content,
-        "utm_content_id":   utm_content_id
-      },
-      "items":    [form.get("item_number", "")]
+    # ───────────────────────────────────────────────────────────
+    # 2.5.2) Atualiza order no UTMify como pago (PayPal)
+    utmify_update = {
+      "orderId":     form.get("txn_id", ""),
+      "status":      "paid",
+      "approvedDate": time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
     }
-    # 1) Serializa payload exato
-    body_str = json.dumps(utmify_payload, separators=(",",":"), ensure_ascii=False)
-    # 2) Gera assinatura HMAC-SHA256 em Base64
-    signature_b64 = base64.b64encode(
-        hmac.new(
-            UTMIFY_API_KEY.encode("utf-8"),
-            body_str.encode("utf-8"),
-            hashlib.sha256
-        ).digest()
-    ).decode("utf-8")
-    # 3) Envia com header correto e body assinado
     resp_utm = requests.post(
-        UTMIFY_API_URL,
-        headers={
-            "Content-Type":  "application/json",
-            "x-api-key":    UTMIFY_API_KEY
-        },
-        json=utmify_payload
+      UTMIFY_API_URL,
+      headers={
+        "Content-Type": "application/json",
+        "x-api-token":  UTMIFY_API_KEY
+      },
+      json=utmify_update
     )
-    print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
-    
+    print("→ Order atualizado no UTMify:", resp_utm.status_code, resp_utm.text)
     # ───────────────────────────────────────────────────────────
 
     # 3) Cria o cliente na Stripe
