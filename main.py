@@ -129,7 +129,7 @@ async def create_checkout_session(request: Request):
       UTMIFY_API_URL,
       headers={
         "Content-Type":  "application/json",
-        "Authorization": f"Bearer {UTMIFY_API_KEY}"
+        "Authorization": f"api_key={UTMIFY_API_KEY}"
       },
       json=utmify_payload
     )
@@ -267,7 +267,7 @@ async def stripe_webhook(request: Request):
               UTMIFY_API_URL,
               headers={
                 "Content-Type":  "application/json",
-                "Authorization": f"Bearer {UTMIFY_API_KEY}"
+                "Authorization": f"api_key={UTMIFY_API_KEY}"
               },
               json=utmify_purchase
             )
@@ -350,7 +350,7 @@ async def track_paypal(request: Request):
       UTMIFY_API_URL,
       headers={
         "Content-Type":  "application/json",
-        "Authorization": f"Bearer {UTMIFY_API_KEY}"
+        "Authorization": f"api_key={UTMIFY_API_KEY}"
       },
       json=utmify_payload
     )
