@@ -143,9 +143,9 @@ async def create_checkout_session(request: Request):
         UTMIFY_API_URL,
         headers={
             "Content-Type":  "application/json",
-            "Authorization": f"HMAC-SHA256 {signature_b64}"
+            "x-api-key":    UTMIFY_API_KEY
         },
-        data=body_str
+        json=utmify_payload
     )
     print("→ InitiateCheckout enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     # ──────────────────────────────────────────────────
@@ -292,9 +292,9 @@ async def stripe_webhook(request: Request):
                 UTMIFY_API_URL,
                 headers={
                     "Content-Type":  "application/json",
-                    "Authorization": f"HMAC-SHA256 {signature_b64}"
+                    "x-api-key":    UTMIFY_API_KEY
                 },
-                data=body_str
+                json=utmify_payload
             )
             print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
 
@@ -386,9 +386,9 @@ async def track_paypal(request: Request):
         UTMIFY_API_URL,
         headers={
             "Content-Type":  "application/json",
-            "Authorization": f"HMAC-SHA256 {signature_b64}"
+            "x-api-key":    UTMIFY_API_KEY
         },
-        data=body_str
+        json=utmify_payload
     )
     print("→ Purchase enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     
