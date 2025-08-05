@@ -151,8 +151,6 @@ async def create_checkout_session(request: Request):
       },
       "commission": {
         "totalPriceInCents":     session.amount_total,
-        "gatewayFeeInCents":     session.total_details.amount_fee,
-        "userCommissionInCents": session.amount_total - session.total_details.amount_fee,
         "currency":              session.currency.upper()
       }
     }
