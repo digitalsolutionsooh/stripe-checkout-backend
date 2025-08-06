@@ -11,16 +11,16 @@ import urllib.parse
 import hmac, base64
 import json
 
-
 app = FastAPI()
 
-# TODO: remova depois de testar
+# CORS
+origins = ["https://learnmoredigitalcourse.com"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],            # permite qualquer front
+    allow_origins=origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
 )
 
 # Env vars
@@ -130,11 +130,15 @@ async def create_checkout_session(request: Request):
       "createdAt":     time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
       "approvedDate":  None,
       "refundedAt":    None,
+      cd = session.customer_details or {}
+      customer_name  = cd.get("name", "")
+      customer_phone = cd.get("phone", None)
+    
       "customer": {
-        "name":     session.customer_details.name or "",
-        "email":    session.customer_details.email,
-        "phone":    session.customer_details.phone or None,
-        "document": None
+          "name":     customer_name,
+          "email":    session.customer_details.email,
+          "phone":    customer_phone,
+          "document": None
       },
       "products": [
         {
