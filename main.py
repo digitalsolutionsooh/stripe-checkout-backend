@@ -122,6 +122,10 @@ async def create_checkout_session(request: Request):
 
     # ──────────────────────────────────────────────────
     #  Envia pedido (order) ao UTMify
+    cd = session.customer_details or {}
+    customer_name  = cd.get("name", "")
+    customer_phone = cd.get("phone", None)
+    
     utmify_order = {
       "orderId":       session.id,
       "platform":      "Stripe",
@@ -130,10 +134,6 @@ async def create_checkout_session(request: Request):
       "createdAt":     time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()),
       "approvedDate":  None,
       "refundedAt":    None,
-      cd = session.customer_details or {}
-      customer_name  = cd.get("name", "")
-      customer_phone = cd.get("phone", None)
-    
       "customer": {
           "name":     customer_name,
           "email":    session.customer_details.email,
