@@ -50,10 +50,11 @@ async def create_checkout_session(request: Request):
     customer_email = body.get("customer_email")
     # coletamos os UTMs
     utms = { k: body.get(k, "") for k in (
-        "utm_source", "utm_medium",
-        "utm_campaign", "utm_campaign_id",
-        "utm_term",   "utm_term_id",
-        "utm_content","utm_content_id"
+        "utm_source", 
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content"
     ) }
 
     if not price_id:
@@ -151,11 +152,8 @@ async def create_checkout_session(request: Request):
         "utm_source":       session.metadata.get("utm_source",""),
         "utm_medium":       session.metadata.get("utm_medium",""),
         "utm_campaign":     session.metadata.get("utm_campaign",""),
-        "utm_campaign_id":  session.metadata.get("utm_campaign_id",""),
         "utm_term":         session.metadata.get("utm_term",""),
-        "utm_term_id":      session.metadata.get("utm_term_id",""),
-        "utm_content":      session.metadata.get("utm_content",""),
-        "utm_content_id":   session.metadata.get("utm_content_id","")
+        "utm_content":      session.metadata.get("utm_content","")
       },
       "commission": {
         "totalPriceInCents":     session.amount_total,
@@ -328,11 +326,8 @@ async def stripe_webhook(request: Request):
                 "utm_source":     session.metadata.get("utm_source",""),
                 "utm_medium":     session.metadata.get("utm_medium",""),
                 "utm_campaign":   session.metadata.get("utm_campaign",""),
-                "utm_campaign_id":session.metadata.get("utm_campaign_id",""),
                 "utm_term":       session.metadata.get("utm_term",""),
-                "utm_term_id":    session.metadata.get("utm_term_id",""),
-                "utm_content":    session.metadata.get("utm_content",""),
-                "utm_content_id": session.metadata.get("utm_content_id","")
+                "utm_content":    session.metadata.get("utm_content","")
               },
              "commission": {
                 "totalPriceInCents":     float(total),  
@@ -374,9 +369,6 @@ async def track_paypal(request: Request):
     utm_campaign     = form.get("custom_utm_campaign", "")
     utm_term         = form.get("custom_utm_term", "")
     utm_content      = form.get("custom_utm_content", "")
-    utm_campaign_id  = form.get("custom_utm_campaign_id", "")
-    utm_term_id      = form.get("custom_utm_term_id", "")
-    utm_content_id   = form.get("custom_utm_content_id", "")
 
     # ───────────────────────────────────────────────────────────
     # 2.5) Dispara o Purchase para a Meta (Facebook) Conversion API
@@ -432,11 +424,8 @@ async def track_paypal(request: Request):
         "utm_source":      utm_source,
         "utm_medium":      utm_medium,
         "utm_campaign":    utm_campaign,
-        "utm_campaign_id": utm_campaign_id,
         "utm_term":        utm_term,
-        "utm_term_id":     utm_term_id,
-        "utm_content":     utm_content,
-        "utm_content_id":  utm_content_id
+        "utm_content":     utm_content
       },
       "commission": {
         "totalPriceInCents":     int(float(form.get("mc_gross", 0)) * 100),
