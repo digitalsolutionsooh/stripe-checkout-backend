@@ -137,7 +137,7 @@ async def create_checkout_session(request: Request):
       "refundedAt":    None,
       "customer": {
           "name":     customer_name,
-          "email":    session.customer_details.email,
+          "email":    customer_email,
           "phone":    customer_phone,
           "document": None
       },
