@@ -14,14 +14,13 @@ import json
 
 app = FastAPI()
 
-# CORS
-origins = ["https://learnmoredigitalcourse.com"]
+# TODO: remova depois de testar
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],            # permite qualquer front
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 # Env vars
