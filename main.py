@@ -123,8 +123,9 @@ async def create_checkout_session(request: Request):
     # ──────────────────────────────────────────────────
     #  Envia pedido (order) ao UTMify
     cd = session.customer_details or {}
-    customer_name  = cd.get("name", "")
-    customer_phone = cd.get("phone", None)
+    customer_name  = getattr(cd, "name", "") or ""
+    customer_email = getattr(cd, "email", "") or ""
+    customer_phone = getattr(cd, "phone", None)
     
     utmify_order = {
       "orderId":       session.id,
