@@ -232,12 +232,6 @@ async def stripe_webhook(request: Request):
         try:
             print(f"🔔 [webhook] criando invoice para sessão {session.id}")
 
-            # 0) força moeda da invoice igual à da sessão
-            stripe.Customer.modify(
-                cust,
-                invoice_settings={"default_currency": session.currency}
-            )
-
             # 1) InvoiceItem para cada linha
             for item in session.line_items.data:
                 ii = stripe.InvoiceItem.create(
