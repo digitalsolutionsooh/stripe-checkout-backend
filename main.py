@@ -69,8 +69,6 @@ async def create_checkout_session(request: Request):
         success_url = 'https://learnmoredigitalcourse.com/lipovive-up1-stripe'
     elif price_id == 'price_1Rs89iEHsMKn9uopwkT6I5ya':
         success_url = 'https://learnmoredigitalcourse.com/lipomax-up1-stripe'
-    elif price_id == 'price_1Rstj7EHsMKn9uopBJQeEopU':
-        success_url = 'https://learnmoredigitalcourse.com/members-area-revital'
     else:
         success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
 
@@ -80,6 +78,8 @@ async def create_checkout_session(request: Request):
         mode='payment',
         customer_creation='always',
         customer_email=customer_email,
+        phone_number_collection={"enabled": True},
+        customer_update={"name": "auto"},
         success_url=success_url,
         cancel_url='https://learnmoredigitalcourse.com/erro',
         # grava UTMs na própria Session
@@ -205,7 +205,12 @@ async def stripe_webhook(request: Request):
         cust = session["customer"]
 
         # 3.1) Primeiro, guarda as UTMs no Customer
-        stripe.Customer.modify(cust, metadata=session.metadata)
+        stripe.Customer.modify(
+            cust, 
+            metadata=session.metadata,
+            name=session.customer_details.name,
+            phone=session.customer_details.phone
+        )
 
         # 3.2) Prepara o payload de Purchase para o Meta
         email_hash = hashlib.sha256(
