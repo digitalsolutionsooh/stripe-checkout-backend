@@ -79,7 +79,6 @@ async def create_checkout_session(request: Request):
         customer_creation='always',
         customer_email=customer_email,
         phone_number_collection={"enabled": True},
-        customer_update={"name": "auto"},
         success_url=success_url,
         cancel_url='https://learnmoredigitalcourse.com/erro',
         # grava UTMs na própria Session
