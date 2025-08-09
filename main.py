@@ -262,10 +262,7 @@ async def stripe_webhook(request: Request):
                     "If you have any questions, please send an email to: "
                     "digital.solutions.ooh@gmail.com"
                 ),
-                metadata={
-                    "product_id": target_product,
-                    **session.metadata
-                }
+                metadata=dict(session.metadata or {})
             )
             print(
                 f"   → Invoice draft criada: {invoice.id}, "
