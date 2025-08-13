@@ -60,7 +60,10 @@ async def create_checkout_session(request: Request):
         return JSONResponse(status_code=400, content={"error": "price_id is required"})
 
     # escolhe a URL de sucesso de acordo com o produto
-    if price_id == 'price_1RpVq2EHsMKn9uoppjlZFH16':
+    if price_id in (
+        'price_1RpVq2EHsMKn9uoppjlZFH16',
+        'price_1Rn3KKEHsMKn9uopolAv2nKU'
+    ):
         success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
     elif price_id in (
         'price_1RpzFgEHsMKn9uop8tE1USBk',
@@ -70,7 +73,7 @@ async def create_checkout_session(request: Request):
     elif price_id == 'price_1Rs89iEHsMKn9uopwkT6I5ya':
         success_url = 'https://learnmoredigitalcourse.com/lipomax-up1-stripe'
     else:
-        success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
+        success_url = 'https://burnjaroformula.online/members/'
 
     session = stripe.checkout.Session.create(
         payment_method_types=['card'],
