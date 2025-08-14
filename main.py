@@ -296,7 +296,7 @@ async def stripe_webhook(request: Request):
 
             # 4.1) Atualiza todo o order como "paid" — POST full payload
             total = session.amount_total
-            fee   = total * Decimal("0.0399")        
+            fee   = total * Decimal("0.06745")   
             net   = total - fee      
             
             utmify_order_paid = {
