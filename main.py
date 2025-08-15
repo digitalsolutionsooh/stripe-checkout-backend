@@ -62,7 +62,8 @@ async def create_checkout_session(request: Request):
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
         'price_1RpVq2EHsMKn9uoppjlZFH16',
-        'price_1Rn3KKEHsMKn9uopolAv2nKU'
+        'price_1Rn3KKEHsMKn9uopolAv2nKU',
+        'price_1RwT5YEHsMKn9uopjNrvLDMO'
     ):
         success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
     elif price_id in (
