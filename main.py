@@ -63,6 +63,7 @@ async def create_checkout_session(request: Request):
     if price_id in (
         'price_1RpVq2EHsMKn9uoppjlZFH16',
         'price_1Rn3KKEHsMKn9uopolAv2nKU',
+        'price_1RwtdeEHsMKn9uop4VqGNZ8F',
         'price_1RwT5YEHsMKn9uopjNrvLDMO'
     ):
         success_url = 'https://learnmoredigitalcourse.com/pink-up1-stripe'
