@@ -72,6 +72,16 @@ async def create_checkout_session(request: Request):
         'price_1RrsCbEHsMKn9uopRnYsH90a'
     ):
         success_url = 'https://learnmoredigitalcourse.com/lipovive-up1-stripe'
+    elif price_id in (
+        'price_1Rs7mWEHsMKn9uopZghmLv7S',
+        'price_1Rs7moEHsMKn9uopXOlAuTWj'
+    ):
+        success_url = 'https://learnmoredigitalcourse.com/pink-up2-stripe'
+    elif price_id in (
+        'price_1Rn3SuEHsMKn9uopMPOEWFb5',
+        'price_1Rs7nGEHsMKn9uop0avvkZyi'
+    ):
+        success_url = 'https://burnjaroformula.online/members/'
     elif price_id == 'price_1Rs89iEHsMKn9uopwkT6I5ya':
         success_url = 'https://learnmoredigitalcourse.com/lipomax-up1-stripe'
     else:
