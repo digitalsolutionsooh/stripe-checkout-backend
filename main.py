@@ -267,7 +267,7 @@ async def create_upsell_intent(request: Request):
         idempotency_key=idem_key
     )
 
-    return {"client_secret": intent.client_secret, "intent_id": intent.id}
+    return {"client_secret": intent.client_secret, "pm_id": pm_id}
 
 @app.post("/webhook")
 async def stripe_webhook(request: Request):
