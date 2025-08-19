@@ -28,6 +28,7 @@ origins = origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=r"^https://(.+\.)?(converteai\.net|converteai\.com\.br|vturb\.com)$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
