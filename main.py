@@ -72,7 +72,6 @@ async def create_checkout_session(request: Request):
 
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
-        'price_1RpVq2EHsMKn9uoppjlZFH16',
         'price_1Rn3KKEHsMKn9uopolAv2nKU',
         'price_1RwtdeEHsMKn9uop4VqGNZ8F',
         'price_1RxEEGEHsMKn9uopcL2e7CVo',
@@ -84,16 +83,6 @@ async def create_checkout_session(request: Request):
         'price_1RrsCbEHsMKn9uopRnYsH90a'
     ):
         success_url = add_sid('https://learnmoredigitalcourse.com/lipovive-up1-stripe')
-    elif price_id in (
-        'price_1Rs7mWEHsMKn9uopZghmLv7S',
-        'price_1Rs7moEHsMKn9uopXOlAuTWj'
-    ):
-        success_url = add_sid('https://learnmoredigitalcourse.com/pink-up2-stripe')
-    elif price_id in (
-        'price_1Rn3SuEHsMKn9uopMPOEWFb5',
-        'price_1Rs7nGEHsMKn9uop0avvkZyi'
-    ):
-        success_url = add_sid('https://burnjaroformula.online/members/')
     elif price_id == 'price_1Rs89iEHsMKn9uopwkT6I5ya':
         success_url = add_sid('https://learnmoredigitalcourse.com/lipomax-up1-stripe')
     elif price_id == 'price_1RxdG9EHsMKn9uopZQAj9Tjs':
