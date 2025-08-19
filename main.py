@@ -20,7 +20,11 @@ def add_sid(url: str) -> str:
 app = FastAPI()
 
 # CORS
-origins = ["https://learnmoredigitalcourse.com"]
+origins = origins = [
+    "https://learnmoredigitalcourse.com",
+    "https://burnjaroformula.online",
+    "https://yt2025hub.com",
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
