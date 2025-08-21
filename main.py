@@ -73,6 +73,7 @@ async def create_checkout_session(request: Request):
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
         'price_1Rn3KKEHsMKn9uopolAv2nKU',
+        'price_1RyNznEHsMKn9uopHakAFd56',
         'price_1RwtdeEHsMKn9uop4VqGNZ8F',
         'price_1RxEEGEHsMKn9uopcL2e7CVo',
         'price_1RwT5YEHsMKn9uopjNrvLDMO'
