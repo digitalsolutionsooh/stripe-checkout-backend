@@ -214,9 +214,6 @@ async def create_upsell_intent(request: Request):
     )
     if not sess or not sess.customer:
         return JSONResponse(status_code=400, content={"error": "Invalid session or missing customer"})
-
-    # Log para verificar o payment_method
-    print("Payment method ID:", sess.payment_intent.payment_method)
     
     customer_id = sess.customer
 
@@ -249,9 +246,6 @@ async def create_upsell_intent(request: Request):
 
     # 4) Idempotência p/ evitar dupla cobrança por duplo clique
     idem_key = f"upsell:{sid}:{price_id}:{quantity}"
-
-    # Log de criação do PaymentIntent
-    print("Criando PaymentIntent com pm_id:", pm_id)
 
     intent = stripe.PaymentIntent.create(
         amount=amount_minor,
