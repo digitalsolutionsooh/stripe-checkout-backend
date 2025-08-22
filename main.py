@@ -72,13 +72,16 @@ async def create_checkout_session(request: Request):
 
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
-        'price_1Rn3KKEHsMKn9uopolAv2nKU',
-        'price_1RyNznEHsMKn9uopHakAFd56',
-        'price_1RwtdeEHsMKn9uop4VqGNZ8F',
         'price_1RxEEGEHsMKn9uopcL2e7CVo',
-        'price_1RwT5YEHsMKn9uopjNrvLDMO'
     ):
         success_url = add_sid('https://learnmoredigitalcourse.com/pink-up1-stripe')
+    elif price_id in (
+        'price_1RyNznEHsMKn9uopHakAFd56',
+        'price_1RwT5YEHsMKn9uopjNrvLDMO',
+        'price_1Rn3KKEHsMKn9uopolAv2nKU',
+        'price_1RwtdeEHsMKn9uop4VqGNZ8F'
+    ):
+        success_url = add_sid('https://learnmoredigitalcourse.com/yo-yo-pink-up1-stripe')
     elif price_id in (
         'price_1RpzFgEHsMKn9uop8tE1USBk',
         'price_1RrsCbEHsMKn9uopRnYsH90a'
@@ -337,6 +340,7 @@ async def stripe_webhook(request: Request):
                 auto_advance=False,
                 collection_method="send_invoice",
                 days_until_due=0,
+                pending_invoice_items_behavior="include",
                 footer=(
                     "Thank you for purchasing the formula. To access the material, "
                     "simply click on the link and follow the instructions: "
@@ -359,13 +363,20 @@ async def stripe_webhook(request: Request):
                 f"{finalized.currency.upper()}"
             )
 
+            # 4) Envia por e-mail
+            try:
+                sent = stripe.Invoice.send_invoice(finalized.id)
+                print(f"→ Invoice enviada por e-mail. Status: {sent.status}. URL: {finalized.hosted_invoice_url}")
+            except Exception as e:
+                print("‼️ Erro ao enviar invoice por e-mail:", e)
+
         except Exception as e:
             import traceback
             print("‼️ Erro criando invoice:", e)
             print(traceback.format_exc())
 
         finally:
-            # 4) Mesmo se der erro acima, sempre envia o evento Purchase
+            # 5) Mesmo se der erro acima, sempre envia o evento Purchase
             resp = requests.post(
                 f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
                 params={"access_token": ACCESS_TOKEN},
@@ -373,7 +384,7 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 4.1) Atualiza todo o order como "paid" — POST full payload
+            # 5.1) Atualiza todo o order como "paid" — POST full payload
             total = session.amount_total
             fee   = total * Decimal("0.0674")   
             net   = total - fee      
