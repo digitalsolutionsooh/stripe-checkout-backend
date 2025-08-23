@@ -354,8 +354,8 @@ async def stripe_webhook(request: Request):
                 f"subtotal: {invoice.subtotal/100:.2f} {invoice.currency.upper()}"
             )
             
-            # 3) Finaliza a Invoice para agregar todos os InvoiceItems
-            finalized = stripe.Invoice.finalize_invoice(invoice.id)
+            # 3) Finaliza a Invoice para agregar todos os InvoiceItems (sem auto-cobrança)
+            finalized = stripe.Invoice.finalize_invoice(invoice.id, auto_advance=False)
             print(
                 f"   → Invoice finalizada: {finalized.id}, "
                 f"valor devido: {finalized.amount_due/100:.2f} {finalized.currency.upper()}"
