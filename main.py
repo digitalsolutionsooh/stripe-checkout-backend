@@ -333,13 +333,12 @@ async def stripe_webhook(request: Request):
                     f"   → InvoiceItem criado: {ii.id}, "
                     f"valor: {ii.amount/100:.2f} {ii.currency.upper()}"
                 )
-
+            
             # 2) Cria a Invoice em draft (não auto-advance)
             invoice = stripe.Invoice.create(
                 customer=cust,
                 auto_advance=False,
-                collection_method="send_invoice",
-                days_until_due=0,
+                collection_method="charge_automatically",   # ← trocado (era "send_invoice")
                 pending_invoice_items_behavior="include",
                 footer=(
                     "Thank you for purchasing the formula. To access the material, "
@@ -354,21 +353,21 @@ async def stripe_webhook(request: Request):
                 f"   → Invoice draft criada: {invoice.id}, "
                 f"subtotal: {invoice.subtotal/100:.2f} {invoice.currency.upper()}"
             )
-
+            
             # 3) Finaliza a Invoice para agregar todos os InvoiceItems
             finalized = stripe.Invoice.finalize_invoice(invoice.id)
             print(
                 f"   → Invoice finalizada: {finalized.id}, "
-                f"valor devida: {finalized.amount_due/100:.2f} "
-                f"{finalized.currency.upper()}"
+                f"valor devido: {finalized.amount_due/100:.2f} {finalized.currency.upper()}"
             )
-
-            # 4) Envia por e-mail
-            try:
-                sent = stripe.Invoice.send_invoice(finalized.id)
-                print(f"→ Invoice enviada por e-mail. Status: {sent.status}. URL: {finalized.hosted_invoice_url}")
-            except Exception as e:
-                print("‼️ Erro ao enviar invoice por e-mail:", e)
+            
+            # 3.1) Marca como paga sem nova cobrança
+            paid = stripe.Invoice.pay(finalized.id, paid_out_of_band=True)
+            print(
+                f"   → Invoice marcada como PAGA: {paid.id} | "
+                f"amount_paid: {paid.amount_paid/100:.2f} {paid.currency.upper()}"
+            )
+            print(f"   → Links: hosted={paid.hosted_invoice_url} | pdf={paid.invoice_pdf}")
 
         except Exception as e:
             import traceback
@@ -376,7 +375,7 @@ async def stripe_webhook(request: Request):
             print(traceback.format_exc())
 
         finally:
-            # 5) Mesmo se der erro acima, sempre envia o evento Purchase
+            # 4) Mesmo se der erro acima, sempre envia o evento Purchase
             resp = requests.post(
                 f"https://graph.facebook.com/v14.0/{PIXEL_ID}/events",
                 params={"access_token": ACCESS_TOKEN},
@@ -384,7 +383,7 @@ async def stripe_webhook(request: Request):
             )
             print("→ Purchase event sent:", resp.status_code, resp.text)
 
-            # 5.1) Atualiza todo o order como "paid" — POST full payload
+            # 4.1) Atualiza todo o order como "paid" — POST full payload
             total = session.amount_total
             fee   = total * Decimal("0.0674")   
             net   = total - fee      
