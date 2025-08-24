@@ -327,7 +327,8 @@ async def stripe_webhook(request: Request):
                     customer=cust,
                     amount=item.amount_subtotal,
                     currency=session.currency,
-                    description=f"{item.description} (Session {session.id})"
+                    description=item.description,             
+                    metadata={"checkout_session": session.id}
                 )
                 print(
                     f"   → InvoiceItem criado: {ii.id}, "
