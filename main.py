@@ -417,7 +417,7 @@ async def stripe_webhook(request: Request):
             )
             print(f"   → Invoice draft criada: {invoice.id} | currency={invoice.currency.upper()}")
 
-            stripe.Invoice.modify(invoice.id, collection_method="send_invoice")
+            stripe.Invoice.modify(invoice.id, collection_method="send_invoice", days_until_due=30)
         
             # 4) Finalizar e marcar como paga (sem e-mail e sem PI)
             finalized = stripe.Invoice.finalize_invoice(
@@ -431,7 +431,7 @@ async def stripe_webhook(request: Request):
             )
 
             if finalized.collection_method != "send_invoice":
-                stripe.Invoice.modify(finalized.id, collection_method="send_invoice")
+                stripe.Invoice.modify(finalized.id, collection_method="send_invoice", due_date=finalized.due_date or int(time.time()) + 30*24*60*60)
             
             state = stripe.Invoice.retrieve(finalized.id, expand=["payment_intent"])
             print(f"   → collection_method={state.collection_method} | has_pi={bool(state.payment_intent)}")
