@@ -115,7 +115,7 @@ async def create_checkout_session(request: Request):
         expand=["line_items"]
     )
 
-    # Conversions API: InitiateCheckout
+    # Conversions API: InitiateCheckout stripe
     event_payload = {
       "data": [{
         "event_name":    "InitiateCheckout",
