@@ -73,13 +73,10 @@ async def create_checkout_session(request: Request):
 
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
-        'price_1RxEEGEHsMKn9uopcL2e7CVo',
-    ):
-        success_url = add_sid('https://learnmoredigitalcourse.com/pink-up1-stripe')
-    elif price_id in (
         'price_1RyNznEHsMKn9uopHakAFd56',
         'price_1RwT5YEHsMKn9uopjNrvLDMO',
         'price_1Rn3KKEHsMKn9uopolAv2nKU',
+        'price_1RxEEGEHsMKn9uopcL2e7CVo',
         'price_1RwtdeEHsMKn9uop4VqGNZ8F'
     ):
         success_url = add_sid('https://learnmoredigitalcourse.com/yo-yo-pink-up1-stripe')
