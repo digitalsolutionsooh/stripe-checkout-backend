@@ -434,7 +434,10 @@ async def stripe_webhook(request: Request):
                 stripe.Invoice.modify(finalized.id, collection_method="send_invoice", due_date=finalized.due_date or int(time.time()) + 30*24*60*60)
             
             state = stripe.Invoice.retrieve(finalized.id, expand=["payment_intent"])
-            print(f"   → collection_method={state.collection_method} | has_pi={bool(state.payment_intent)}")
+            pi_obj = getattr(state, "payment_intent", None)  # pode não existir
+            print(f"   → collection_method={state.collection_method} | has_pi={bool(pi_obj)}")
+            if pi_obj:
+                print(f"   → PI inesperado atrelado: {getattr(pi_obj, 'id', pi_obj)}")
         
             if finalized.status != "paid":
                 paid = stripe.Invoice.pay(
