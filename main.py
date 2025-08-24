@@ -111,6 +111,7 @@ async def create_checkout_session(request: Request):
             "metadata": utms,
             "setup_future_usage": "off_session"
         },
+        invoice_creation={"enabled": False},
         expand=["line_items"]
     )
 
@@ -415,6 +416,8 @@ async def stripe_webhook(request: Request):
                 idempotency_key=f"{idem_prefix}:invoice:create",
             )
             print(f"   → Invoice draft criada: {invoice.id} | currency={invoice.currency.upper()}")
+
+            stripe.Invoice.update(invoice.id, collection_method="send_invoice")
         
             # 4) Finalizar e marcar como paga (sem e-mail e sem PI)
             finalized = stripe.Invoice.finalize_invoice(
@@ -426,6 +429,12 @@ async def stripe_webhook(request: Request):
                 f"   → Invoice finalizada: {finalized.id} | "
                 f"amount_due: {finalized.amount_due/100:.2f} {finalized.currency.upper()}"
             )
+
+            if finalized.collection_method != "send_invoice":
+                stripe.Invoice.update(finalized.id, collection_method="send_invoice")
+            
+            state = stripe.Invoice.retrieve(finalized.id, expand=["payment_intent"])
+            print(f"   → collection_method={state.collection_method} | has_pi={bool(state.payment_intent)}")
         
             if finalized.status != "paid":
                 paid = stripe.Invoice.pay(
