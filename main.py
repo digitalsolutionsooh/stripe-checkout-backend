@@ -329,20 +329,20 @@ async def stripe_webhook(request: Request):
         try:
             print(f"🔔 [webhook] criando invoice (safe) para sessão {session.id}")
         
-            # — Idempotência base para esta sessão
             idem_prefix = f"cs:{session.id}"
         
-            # 1) Buscar line items SEMPRE via API (expand product p/ nome)
+            # 1) Buscar line items via API (expand product p/ nome)
             line_items = stripe.checkout.Session.list_line_items(
                 session.id,
                 expand=["data.price.product"]
             )
         
             # 2) Criar a Invoice em draft usando send_invoice
-            #    (não cria PaymentIntent interno e não envia e-mail porque NÃO chamaremos send_invoice())
+            #    (sem e-mail e SEM PaymentIntent interno)
             invoice = stripe.Invoice.create(
                 customer=cust,
-                collection_method="send_invoice",   # <- chave para não gerar PI interno
+                collection_method="send_invoice",
+                days_until_due=30,                 # <- obrigatório com send_invoice
                 auto_advance=False,
                 description="Compra via Checkout",
                 footer=(
@@ -357,12 +357,11 @@ async def stripe_webhook(request: Request):
             )
             print(f"   → Invoice draft criada: {invoice.id}")
         
-            # 3) Criar InvoiceItems já AMARRADOS à invoice (sem pending include)
+            # 3) Criar InvoiceItems ANEXADOS à invoice (sem pending include)
             currency = (getattr(session, "currency", None) or "usd").lower()
-        
             for li in line_items.auto_paging_iter():
                 qty = li.get("quantity", 1)
-                amount_total = li.get("amount_total")  # total daquele item (já inclui qty/discount/tax)
+                amount_total = li.get("amount_total")  # total do item (já c/ qty/discount/tax)
                 unit_amount = unit_amount_from_total(amount_total, qty)
         
                 price = li.get("price") or {}
@@ -373,19 +372,13 @@ async def stripe_webhook(request: Request):
                     customer=cust,
                     invoice=invoice.id,            # <- prende o item à invoice
                     currency=currency,
-                    unit_amount=unit_amount,       # valor por unidade
+                    unit_amount=unit_amount,
                     quantity=qty,
                     description=clean_desc(name),
-                    metadata={
-                        "parent_session_id": session.id,
-                        "line_item_id": li.get("id","")
-                    },
+                    metadata={"parent_session_id": session.id, "line_item_id": li.get("id","")},
                     idempotency_key=f"{idem_prefix}:ii:{li.get('id')}",
                 )
-                print(
-                    f"   → InvoiceItem criado: {ii.id} | "
-                    f"{qty} x {unit_amount/100:.2f} {currency.upper()}"
-                )
+                print(f"   → InvoiceItem criado: {ii.id} | {qty} x {unit_amount/100:.2f} {currency.upper()}")
         
             # 4) Finalizar e marcar como paga (sem e-mail e sem PI)
             finalized = stripe.Invoice.finalize_invoice(
@@ -393,10 +386,7 @@ async def stripe_webhook(request: Request):
                 auto_advance=False,
                 idempotency_key=f"{idem_prefix}:invoice:finalize",
             )
-            print(
-                f"   → Invoice finalizada: {finalized.id} | "
-                f"amount_due: {finalized.amount_due/100:.2f} {finalized.currency.upper()}"
-            )
+            print(f"   → Invoice finalizada: {finalized.id} | amount_due: {finalized.amount_due/100:.2f} {finalized.currency.upper()}")
         
             if finalized.status != "paid":
                 paid = stripe.Invoice.pay(
@@ -404,16 +394,12 @@ async def stripe_webhook(request: Request):
                     paid_out_of_band=True,
                     idempotency_key=f"{idem_prefix}:invoice:pay",
                 )
-                print(
-                    f"   → Invoice marcada como PAGA: {paid.id} | "
-                    f"amount_paid: {paid.amount_paid/100:.2f} {paid.currency.upper()}"
-                )
+                print(f"   → Invoice marcada como PAGA: {paid.id} | amount_paid: {paid.amount_paid/100:.2f} {paid.currency.upper()}")
                 print(f"   → Links: hosted={paid.hosted_invoice_url} | pdf={paid.invoice_pdf}")
             else:
                 print("   → Invoice já estava 'paid' (provavelmente amount_due=0).")
         
         except stripe.error.InvalidRequestError as e:
-            # Evita quebrar se, por algum motivo raro, a invoice já estiver paga
             if "Invoice is already paid" in str(e):
                 print("ℹ Invoice já estava paga, ignorando pay().")
             else:
