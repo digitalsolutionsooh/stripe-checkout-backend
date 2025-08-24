@@ -322,10 +322,6 @@ async def stripe_webhook(request: Request):
         def clean_desc(raw: str) -> str:
             return re.sub(r"\s*\(Session\s+cs_[a-zA-Z0-9_]+\)\s*$", "", (raw or "")).strip()
         
-        def unit_amount_from_total(amount_total: int, qty: int) -> int:
-            qty = max(1, int(qty or 1))
-            return int(round(amount_total / qty))
-        
         try:
             print(f"🔔 [webhook] criando invoice (safe) para sessão {session.id}")
         
@@ -337,12 +333,11 @@ async def stripe_webhook(request: Request):
                 expand=["data.price.product"]
             )
         
-            # 2) Criar a Invoice em draft usando send_invoice
-            #    (sem e-mail e SEM PaymentIntent interno)
+            # 2) Criar a Invoice em draft usando send_invoice (sem e-mail e sem PI interno)
             invoice = stripe.Invoice.create(
                 customer=cust,
                 collection_method="send_invoice",
-                days_until_due=30,                 # <- obrigatório com send_invoice
+                days_until_due=30,                 # obrigatório com send_invoice
                 auto_advance=False,
                 description="Compra via Checkout",
                 footer=(
@@ -357,12 +352,20 @@ async def stripe_webhook(request: Request):
             )
             print(f"   → Invoice draft criada: {invoice.id}")
         
-            # 3) Criar InvoiceItems ANEXADOS à invoice (sem pending include)
+            # 3) Criar InvoiceItems ANEXADOS à invoice
             currency = (getattr(session, "currency", None) or "usd").lower()
+        
             for li in line_items.auto_paging_iter():
-                qty = li.get("quantity", 1)
-                amount_total = li.get("amount_total")  # total do item (já c/ qty/discount/tax)
-                unit_amount = unit_amount_from_total(amount_total, qty)
+                # total exato do line item (já com qty/descontos/impostos)
+                total = li.get("amount_total")
+                if total is None:
+                    # fallback defensivo
+                    total = li.get("amount_subtotal")
+                    if total is None:
+                        price = (li.get("price") or {})
+                        unit = int(price.get("unit_amount") or 0)
+                        qty = int(li.get("quantity") or 1)
+                        total = unit * qty
         
                 price = li.get("price") or {}
                 product = price.get("product") or {}
@@ -370,15 +373,14 @@ async def stripe_webhook(request: Request):
         
                 ii = stripe.InvoiceItem.create(
                     customer=cust,
-                    invoice=invoice.id,            # <- prende o item à invoice
+                    invoice=invoice.id,            # prende o item à invoice
                     currency=currency,
-                    unit_amount=unit_amount,
-                    quantity=qty,
+                    amount=int(total),             # <- use AMOUNT (total em centavos)
                     description=clean_desc(name),
                     metadata={"parent_session_id": session.id, "line_item_id": li.get("id","")},
                     idempotency_key=f"{idem_prefix}:ii:{li.get('id')}",
                 )
-                print(f"   → InvoiceItem criado: {ii.id} | {qty} x {unit_amount/100:.2f} {currency.upper()}")
+                print(f"   → InvoiceItem criado: {ii.id} | total: {int(total)/100:.2f} {currency.upper()}")
         
             # 4) Finalizar e marcar como paga (sem e-mail e sem PI)
             finalized = stripe.Invoice.finalize_invoice(
