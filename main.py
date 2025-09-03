@@ -461,7 +461,7 @@ async def stripe_webhook(request: Request):
                     if (it.get("metadata") or {}).get("parent_session_id") == session.id:
                         inv = it
                         break
-        
+
                 if inv:
                     print(f"   → Reutilizando invoice existente: {inv.id} (status={inv.status})")
                     # Se ainda DRAFT, aproveita para garantir footer/descrição atualizados
@@ -475,7 +475,7 @@ async def stripe_webhook(request: Request):
                         )
                         inv = stripe.Invoice.finalize_invoice(inv.id, auto_advance=False)
                         print(f"   → Invoice finalizada: {inv.id} | amount_due: {inv.amount_due/100:.2f} {inv.currency.upper()}")
-        
+
                     # Paga out-of-band se ainda não estiver paga
                     if inv.status != "paid":
                         paid = stripe.Invoice.pay(
@@ -492,18 +492,11 @@ async def stripe_webhook(request: Request):
                         print("   → Invoice já estava 'paid'.")
                 else:
                     print("   → Nenhuma invoice existente encontrada para esta sessão. Verifique os parâmetros/execuções anteriores.")
-        
-        except stripe.error.InvalidRequestError as e:
-            if "Invoice is already paid" in str(e):
-                print("ℹ Invoice já estava paga, ignorando pay().")
-            else:
+
+            except Exception as _e:
                 import traceback
-                print("‼️ Erro criando invoice:", e)
+                print("‼️ Falha ao reaproveitar invoice após IdempotencyError:", _e)
                 print(traceback.format_exc())
-        except Exception as e:
-            import traceback
-            print("‼️ Erro criando invoice:", e)
-            print(traceback.format_exc())
 
         finally:
             # 4) Mesmo se der erro acima, sempre envia o evento Purchase
