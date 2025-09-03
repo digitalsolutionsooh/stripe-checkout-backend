@@ -87,14 +87,14 @@ async def create_checkout_session(request: Request):
     
     bump_price_id = body.get("bump_price_id") or BUMP_BY_MAIN.get(price_id)
 
-    optional_items = []
+    line_items = [{'price': price_id, 'quantity': quantity}]
     if bump_price_id:
-        optional_items.append({
+        line_items.append({
             "price": bump_price_id,
-            "quantity": 1,
-            "adjustable_quantity": {"enabled": True, "minimum": 0, "maximum": 1}
+            "quantity": 1,  # vem no pedido
+            "adjustable_quantity": {"enabled": True, "minimum": 0, "maximum": 1}  # permite remover
         })
-    
+
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
         'price_1RyNznEHsMKn9uopHakAFd56',
@@ -118,8 +118,7 @@ async def create_checkout_session(request: Request):
 
     session = stripe.checkout.Session.create(
         payment_method_types=['card'],
-        line_items=[{'price': price_id, 'quantity': quantity}],
-        optional_items=optional_items,
+        line_items=line_items,
         mode='payment',
         customer_creation='always',
         customer_email=customer_email,
