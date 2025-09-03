@@ -360,7 +360,7 @@ async def stripe_webhook(request: Request):
             # 2) Criar InvoiceItems PENDENTES (um por line item), na moeda do Checkout
             #    Usamos amount_total (total exato do item já com qty/discount/imposto).
             created_any = False
-            for li in stripe.ListObject.auto_paging_iter(line_items):
+            for li in line_items.auto_paging_iter():
                 total = li.get("amount_total")
                 if total is None:
                     # Fallback defensivo
@@ -395,6 +395,13 @@ async def stripe_webhook(request: Request):
                 raise RuntimeError("Nenhum InvoiceItem criado; verifique os line items.")
         
             # 3) Criar a Invoice com include dos pendentes (herda a MOEDA dos itens)
+            footer_text = (
+                "Thank you for purchasing the formula. To access the material, "
+                "simply click on the link and follow the instructions: "
+                "https://learnmoredigitalcourse.com/members-area-audizen/\n\n"
+                "If you have any questions, please send an email to: "
+                "digital.solutions.ooh@gmail.com"
+            )
             invoice = stripe.Invoice.create(
                 customer=cust,
                 collection_method="send_invoice",               # evita criar PaymentIntent interno
@@ -402,15 +409,8 @@ async def stripe_webhook(request: Request):
                 pending_invoice_items_behavior="include",       # inclui os pendentes criados acima
                 auto_advance=False,
                 description="Compra via Checkout",
-                footer=(
-                    "Thank you for purchasing the formula. To access the material, "
-                    "simply click on the link and follow the instructions: "
-                    "https://burnjaroformula.online/members/\n\n"
-                    "If you have any questions, please send an email to: "
-                    "digital.solutions.ooh@gmail.com"
-                ),
+                footer=footer_text,                             # <— usa variável
                 metadata={**(dict(session.metadata or {})), "parent_session_id": session.id},
-                idempotency_key=f"{idem_prefix}:invoice:create",
             )
             print(f"   → Invoice draft criada: {invoice.id} | currency={invoice.currency.upper()}")
 
@@ -449,6 +449,49 @@ async def stripe_webhook(request: Request):
                 print(f"   → Links: hosted={paid.hosted_invoice_url} | pdf={paid.invoice_pdf}")
             else:
                 print("   → Invoice já estava 'paid' (provavelmente amount_due=0).")
+
+        except stripe.error.IdempotencyError as e:
+            # Ocorre quando o mesmo idempotency_key foi usado com parâmetros diferentes em alguma execução
+            print("⚠️ IdempotencyError ao criar invoice:", e)
+            try:
+                # Tenta achar invoice já vinculada a esta sessão
+                inv = None
+                invs = stripe.Invoice.list(customer=cust, limit=50)
+                for it in invs.auto_paging_iter():
+                    if (it.get("metadata") or {}).get("parent_session_id") == session.id:
+                        inv = it
+                        break
+        
+                if inv:
+                    print(f"   → Reutilizando invoice existente: {inv.id} (status={inv.status})")
+                    # Se ainda DRAFT, aproveita para garantir footer/descrição atualizados
+                    if inv.status == "draft":
+                        inv = stripe.Invoice.modify(
+                            inv.id,
+                            collection_method="send_invoice",
+                            days_until_due=30,
+                            description="Compra via Checkout",
+                            footer=footer_text,
+                        )
+                        inv = stripe.Invoice.finalize_invoice(inv.id, auto_advance=False)
+                        print(f"   → Invoice finalizada: {inv.id} | amount_due: {inv.amount_due/100:.2f} {inv.currency.upper()}")
+        
+                    # Paga out-of-band se ainda não estiver paga
+                    if inv.status != "paid":
+                        paid = stripe.Invoice.pay(
+                            inv.id,
+                            paid_out_of_band=True,
+                            idempotency_key=f"{idem_prefix}:invoice:pay",
+                        )
+                        print(
+                            f"   → Invoice marcada como PAGA: {paid.id} | "
+                            f"amount_paid: {paid.amount_paid/100:.2f} {paid.currency.upper()}"
+                        )
+                        print(f"   → Links: hosted={paid.hosted_invoice_url} | pdf={paid.invoice_pdf}")
+                    else:
+                        print("   → Invoice já estava 'paid'.")
+                else:
+                    print("   → Nenhuma invoice existente encontrada para esta sessão. Verifique os parâmetros/execuções anteriores.")
         
         except stripe.error.InvalidRequestError as e:
             if "Invoice is already paid" in str(e):
