@@ -398,7 +398,7 @@ async def stripe_webhook(request: Request):
             footer_text = (
                 "Thank you for purchasing the formula. To access the material, "
                 "simply click on the link and follow the instructions: "
-                "https://learnmoredigitalcourse.com/members-area-audizen/\n\n"
+                "https://burnjaroformula.online/members/\n\n"
                 "If you have any questions, please send an email to: "
                 "digital.solutions.ooh@gmail.com"
             )
