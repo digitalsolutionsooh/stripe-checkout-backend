@@ -43,6 +43,20 @@ ACCESS_TOKEN        = os.getenv("ACCESS_TOKEN")
 UTMIFY_API_URL      = os.getenv("UTMIFY_API_URL")
 UTMIFY_API_KEY      = os.getenv("UTMIFY_API_KEY")
 
+BUMP_BY_MAIN = {
+    # "price_principal": "price_do_bump"
+    'price_1RyNznEHsMKn9uopHakAFd56': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1RwT5YEHsMKn9uopjNrvLDMO': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1Rn3KKEHsMKn9uopolAv2nKU': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1RxEEGEHsMKn9uopcL2e7CVo': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1RwtdeEHsMKn9uop4VqGNZ8F': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1RpzFgEHsMKn9uop8tE1USBk': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1RrsCbEHsMKn9uopRnYsH90a': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1Rs89iEHsMKn9uopwkT6I5ya': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1S3MgZEHsMKn9uopn0VBzOH5': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+    'price_1RxdG9EHsMKn9uopZQAj9Tjs': 'price_1S3NKhEHsMKn9uopTxAtKwkf',
+}
+
 @app.get("/health")
 async def health():
     return {"status": "up"}
@@ -70,7 +84,17 @@ async def create_checkout_session(request: Request):
 
     if not price_id:
         return JSONResponse(status_code=400, content={"error": "price_id is required"})
+    
+    bump_price_id = body.get("bump_price_id") or BUMP_BY_MAIN.get(price_id)
 
+    optional_items = []
+    if bump_price_id:
+        optional_items.append({
+            "price": bump_price_id,
+            "quantity": 1,
+            "adjustable_quantity": {"enabled": True, "minimum": 0, "maximum": 1}
+        })
+    
     # escolhe a URL de sucesso de acordo com o produto
     if price_id in (
         'price_1RyNznEHsMKn9uopHakAFd56',
@@ -95,6 +119,7 @@ async def create_checkout_session(request: Request):
     session = stripe.checkout.Session.create(
         payment_method_types=['card'],
         line_items=[{'price': price_id, 'quantity': quantity}],
+        optional_items=optional_items,
         mode='payment',
         customer_creation='always',
         customer_email=customer_email,
