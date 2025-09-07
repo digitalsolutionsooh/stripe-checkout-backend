@@ -527,16 +527,15 @@ async def stripe_webhook(request: Request):
                 "document": None
               },
               "products": [
-                {
-                  "id":            li.price.id,
-                  "name":          li.description or li.price.id,
-                  "planId":        li.price.id,
-                  "planName":      li.price.nickname or None,
-                  "quantity":      li.quantity,
-                  "priceInCents":  li.amount_subtotal
-                }
-                for li in session.line_items.data
-              ],
+                  {
+                    "id":           product_id or price_id,   # pode usar o product_id para agrupar por produto
+                    "name":         product_name,             # ← nome do produto da Stripe
+                    "planId":       price_id,                 # mantém o Price como plano
+                    "planName":     plan_name,                # nickname do Price (ou fallback)
+                    "quantity":     int(meta.get("quantity","1") or "1"),
+                    "priceInCents": total
+                  }
+                ],
               "trackingParameters": {
                 "utm_source":     session.metadata.get("utm_source",""),
                 "utm_medium":     session.metadata.get("utm_medium",""),
@@ -566,16 +565,41 @@ async def stripe_webhook(request: Request):
         # ↳ UPSSELL 1-CLICK (confirmado no front com confirmCardPayment)
         intent_id = event["data"]["object"]["id"]
         intent = stripe.PaymentIntent.retrieve(intent_id, expand=["latest_charge"])
-
+    
         # Só processa se marcamos como upsell no metadata
         meta = dict(getattr(intent, "metadata", {}) or {})
         if meta.get("upsell") != "true":
             # não é upsell, ignorar
             return JSONResponse({"received": True})
-
+    
+        # ── Nomes do produto/price na Stripe (para UTMify) ─────────────────────
+        product_name = "Upsell"   # fallback
+        plan_name    = "Upsell"   # fallback
+        product_id   = None
+    
+        price_id = meta.get("price_id")
+        if price_id:
+            try:
+                pr = stripe.Price.retrieve(price_id, expand=["product"])
+                # apelido do price (se houver)
+                plan_name = getattr(pr, "nickname", None) or plan_name
+    
+                prod_obj = getattr(pr, "product", None)
+                # StripeObject costuma ter .get(); se vier id string, busca o produto
+                if isinstance(prod_obj, dict) or hasattr(prod_obj, "get"):
+                    product_name = prod_obj.get("name") or plan_name or product_name
+                    product_id   = prod_obj.get("id")
+                elif isinstance(prod_obj, str):
+                    prod = stripe.Product.retrieve(prod_obj)
+                    product_name = getattr(prod, "name", None) or plan_name or product_name
+                    product_id   = getattr(prod, "id", None)
+            except Exception as e:
+                print("→ Falha ao obter nome do upsell:", e)
+        # ───────────────────────────────────────────────────────────────────────
+    
         # ── Dados do cliente (name/email/phone) ──────────────────────────
         email = name = phone = None
-
+    
         # 1) billing_details da primeira charge
         ch = getattr(intent, "charges", None)
         if ch and getattr(ch, "data", None):
@@ -585,14 +609,14 @@ async def stripe_webhook(request: Request):
                 email = getattr(bd, "email", None) or None
                 name  = getattr(bd, "name",  None) or None
                 phone = getattr(bd, "phone", None) or None
-
+    
         if (not email or not name or not phone) and getattr(intent, "latest_charge", None):
             bd = getattr(intent.latest_charge, "billing_details", None)
             if bd:
                 email = getattr(bd, "email", None) or email
                 name  = getattr(bd, "name",  None) or name
                 phone = getattr(bd, "phone", None) or phone
-
+    
         # 2) fallback: Customer
         cust_id = getattr(intent, "customer", None)
         if cust_id and (not email or not name or not phone):
@@ -600,8 +624,8 @@ async def stripe_webhook(request: Request):
             email = email or (cust.get("email") or None)
             name  = name  or (cust.get("name")  or None)
             phone = phone or (cust.get("phone") or None)
-
-        # ── Cálculos (mesma regra do seu código) ────────────────────────
+    
+        # ── Cálculos ─────────────────────────────────────────────────────
         total = int(intent.amount)                         # em centavos
         fee   = total * Decimal("0.0674")
         net   = total - fee
