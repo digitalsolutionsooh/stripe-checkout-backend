@@ -528,13 +528,14 @@ async def stripe_webhook(request: Request):
               },
               "products": [
                   {
-                    "id":           product_id or price_id,   # pode usar o product_id para agrupar por produto
-                    "name":         product_name,             # ← nome do produto da Stripe
-                    "planId":       price_id,                 # mantém o Price como plano
-                    "planName":     plan_name,                # nickname do Price (ou fallback)
-                    "quantity":     int(meta.get("quantity","1") or "1"),
-                    "priceInCents": total
+                    "id":            li.price.id,
+                    "name":          li.description or li.price.id,
+                    "planId":        li.price.id,
+                    "planName":      li.price.nickname or None,
+                    "quantity":      li.quantity,
+                    "priceInCents":  li.amount_subtotal
                   }
+                  for li in session.line_items.data
                 ],
               "trackingParameters": {
                 "utm_source":     session.metadata.get("utm_source",""),
@@ -672,15 +673,15 @@ async def stripe_webhook(request: Request):
             "document": None
           },
           "products": [
-            {
-              "id":           meta.get("price_id"),
-              "name":         meta.get("price_id") or "Upsell",
-              "planId":       meta.get("price_id"),
-              "planName":     "Upsell",
-              "quantity":     int(meta.get("quantity","1") or "1"),
-              "priceInCents": total
-            }
-          ],
+              {
+                "id":           product_id or price_id,   # agrupar por produto? prefira product_id
+                "name":         product_name,             # nome real do produto (Stripe)
+                "planId":       price_id,                 # mantém o Price como plano
+                "planName":     plan_name,                # nickname do Price (ou fallback)
+                "quantity":     int(meta.get("quantity","1") or "1"),
+                "priceInCents": total
+              }
+            ],
           "trackingParameters": {
             "utm_source":   meta.get("utm_source",""),
             "utm_medium":   meta.get("utm_medium",""),
