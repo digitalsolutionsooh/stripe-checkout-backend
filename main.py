@@ -197,7 +197,10 @@ async def create_checkout_session(request: Request):
     print("→ Order enviado ao UTMify:", resp_utm.status_code, resp_utm.text)
     # ──────────────────────────────────────────────────
 
-    return {"checkout_url": session.url}
+    return {
+        "checkout_url": session.url,
+        "session_id": session.id,  # usaremos como eventID do Pixel
+    }
 
 @app.post("/upsell/intent")
 async def create_upsell_intent(request: Request):
