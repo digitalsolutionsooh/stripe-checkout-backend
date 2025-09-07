@@ -88,7 +88,7 @@ async def create_checkout_session(request: Request):
     elif price_id == 'price_1Rs89iEHsMKn9uopwkT6I5ya':
         success_url = add_sid('https://learnmoredigitalcourse.com/lipomax-up1-stripe')
     elif price_id == 'price_1S3MgZEHsMKn9uopn0VBzOH5':
-        success_url = add_sid('https://learnmoredigitalcourse.com/teste-pink-up1-stripe-2')
+        success_url = add_sid('https://learnmoredigitalcourse.com/teste-pink-up1-stripe')
     else:
         success_url = add_sid('https://burnjaroformula.online/members/')
 
